@@ -346,110 +346,108 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
               ) {
                 return SweepSheetFrame(
                   maxWidth: 760,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        const SweepSectionHeader(
-                          title: 'Tag and organize',
-                          subtitle:
-                              'Attach labels, choose a target folder, and continue the session.',
-                        ),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: state.customTags
-                              .map(
-                                (String tag) => SweepPill(
-                                  text: tag,
-                                  icon: CupertinoIcons.tag_fill,
-                                  color: SweepTheme.of(context).colors.info,
-                                  selected: selectedTags.contains(tag),
-                                  onTap: () {
-                                    setModalState(() {
-                                      if (selectedTags.contains(tag)) {
-                                        selectedTags.remove(tag);
-                                      } else {
-                                        selectedTags.add(tag);
-                                      }
-                                    });
-                                  },
-                                ),
-                              )
-                              .toList(),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: SweepTextField(
-                                label: 'Create tag',
-                                placeholder: 'Archive / Receipts / Family',
-                                controller: tagController,
-                                prefix: const Icon(CupertinoIcons.tag),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 24),
-                              child: SweepButton(
-                                label: 'Add',
-                                variant: SweepButtonVariant.secondary,
-                                onPressed: () {
-                                  final String tag = tagController.text.trim();
-                                  if (tag.isEmpty) {
-                                    return;
-                                  }
-                                  controller.addCustomTag(tag);
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const SweepSectionHeader(
+                        title: 'Tag and organize',
+                        subtitle:
+                            'Attach labels, choose a target folder, and continue the session.',
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: state.customTags
+                            .map(
+                              (String tag) => SweepPill(
+                                text: tag,
+                                icon: CupertinoIcons.tag_fill,
+                                color: SweepTheme.of(context).colors.info,
+                                selected: selectedTags.contains(tag),
+                                onTap: () {
                                   setModalState(() {
-                                    selectedTags.add(tag);
-                                    tagController.clear();
+                                    if (selectedTags.contains(tag)) {
+                                      selectedTags.remove(tag);
+                                    } else {
+                                      selectedTags.add(tag);
+                                    }
                                   });
                                 },
                               ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: SweepTextField(
+                              label: 'Create tag',
+                              placeholder: 'Archive / Receipts / Family',
+                              controller: tagController,
+                              prefix: const Icon(CupertinoIcons.tag),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Move to folder',
-                          style: SweepTheme.of(context).typography.caption,
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: controller.folders().map((String folder) {
-                            return SweepPill(
-                              text: folder,
-                              icon: CupertinoIcons.folder_fill,
-                              color: SweepTheme.of(context).colors.warning,
-                              selected: selectedFolder == folder,
-                              onTap: () {
+                          ),
+                          const SizedBox(width: 10),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 24),
+                            child: SweepButton(
+                              label: 'Add',
+                              variant: SweepButtonVariant.secondary,
+                              onPressed: () {
+                                final String tag = tagController.text.trim();
+                                if (tag.isEmpty) {
+                                  return;
+                                }
+                                controller.addCustomTag(tag);
                                 setModalState(() {
-                                  selectedFolder = folder;
+                                  selectedTags.add(tag);
+                                  tagController.clear();
                                 });
                               },
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 18),
-                        SweepButton(
-                          label: 'Apply tag / move',
-                          icon: CupertinoIcons.check_mark_circled_solid,
-                          expand: true,
-                          onPressed: () {
-                            Navigator.of(context).pop(
-                              _TagMoveAction(
-                                tags: selectedTags.toList(),
-                                folder: selectedFolder,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Move to folder',
+                        style: SweepTheme.of(context).typography.caption,
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: controller.folders().map((String folder) {
+                          return SweepPill(
+                            text: folder,
+                            icon: CupertinoIcons.folder_fill,
+                            color: SweepTheme.of(context).colors.warning,
+                            selected: selectedFolder == folder,
+                            onTap: () {
+                              setModalState(() {
+                                selectedFolder = folder;
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 18),
+                      SweepButton(
+                        label: 'Apply tag / move',
+                        icon: CupertinoIcons.check_mark_circled_solid,
+                        expand: true,
+                        onPressed: () {
+                          Navigator.of(context).pop(
+                            _TagMoveAction(
+                              tags: selectedTags.toList(),
+                              folder: selectedFolder,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 );
               },

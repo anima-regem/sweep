@@ -142,12 +142,18 @@ class _SweepButtonState extends State<SweepButton> {
       SweepButtonSize.hero => 58,
     };
     final EdgeInsetsGeometry padding = switch (widget.size) {
-      SweepButtonSize.compact =>
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      SweepButtonSize.regular =>
-        const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      SweepButtonSize.hero =>
-        const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      SweepButtonSize.compact => const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 10,
+      ),
+      SweepButtonSize.regular => const EdgeInsets.symmetric(
+        horizontal: 18,
+        vertical: 14,
+      ),
+      SweepButtonSize.hero => const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 18,
+      ),
     };
 
     Widget content = AnimatedScale(
@@ -401,8 +407,7 @@ class SweepPage extends StatelessWidget {
             176,
           ),
       children: <Widget>[
-        if (eyebrow != null)
-          Text(eyebrow!, style: theme.typography.caption),
+        if (eyebrow != null) Text(eyebrow!, style: theme.typography.caption),
         if (eyebrow != null) const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,7 +550,9 @@ class SweepTextField extends StatelessWidget {
             onTap: onTap,
             placeholder: placeholder,
             onSubmitted: onSubmitted,
-            style: theme.typography.body.copyWith(color: theme.colors.textPrimary),
+            style: theme.typography.body.copyWith(
+              color: theme.colors.textPrimary,
+            ),
             placeholderStyle: theme.typography.body.copyWith(
               color: theme.colors.textTertiary,
             ),
@@ -660,10 +667,7 @@ class SweepListRow extends StatelessWidget {
       padding: padding,
       child: Row(
         children: <Widget>[
-          if (leading != null) ...<Widget>[
-            leading!,
-            const SizedBox(width: 12),
-          ],
+          if (leading != null) ...<Widget>[leading!, const SizedBox(width: 12)],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,11 +770,7 @@ class SweepAnimatedNumber extends StatelessWidget {
 }
 
 class SweepCheckIndicator extends StatelessWidget {
-  const SweepCheckIndicator({
-    required this.selected,
-    this.color,
-    super.key,
-  });
+  const SweepCheckIndicator({required this.selected, this.color, super.key});
 
   final bool selected;
   final Color? color;
@@ -834,17 +834,18 @@ class SweepEmptyState extends StatelessWidget {
             child: Icon(icon, size: 34, color: theme.colors.primary),
           ),
           const SizedBox(height: 14),
-          Text(title, style: theme.typography.headline, textAlign: TextAlign.center),
+          Text(
+            title,
+            style: theme.typography.headline,
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 10),
           Text(
             body,
             style: theme.typography.detail,
             textAlign: TextAlign.center,
           ),
-          if (action != null) ...<Widget>[
-            const SizedBox(height: 18),
-            action!,
-          ],
+          if (action != null) ...<Widget>[const SizedBox(height: 18), action!],
         ],
       ),
     );
@@ -937,23 +938,24 @@ Future<T?> showSweepDialog<T>({
     barrierLabel: 'Dismiss',
     barrierColor: theme.colors.scrim,
     transitionDuration: theme.motion.screen,
-    pageBuilder: (
-      BuildContext context,
-      Animation<double> animation,
-      Animation<double> secondaryAnimation,
-    ) {
-      return SweepThemeScope(
-        theme: theme,
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Builder(builder: builder),
+    pageBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+        ) {
+          return SweepThemeScope(
+            theme: theme,
+            child: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Builder(builder: builder),
+                ),
+              ),
             ),
-          ),
-        ),
-      );
-    },
+          );
+        },
     transitionBuilder:
         (
           BuildContext context,
@@ -988,24 +990,25 @@ Future<T?> showSweepSheet<T>({
     barrierLabel: 'Dismiss',
     barrierColor: theme.colors.scrim.withValues(alpha: 0.72),
     transitionDuration: theme.motion.screen,
-    pageBuilder: (
-      BuildContext context,
-      Animation<double> animation,
-      Animation<double> secondaryAnimation,
-    ) {
-      return SweepThemeScope(
-        theme: theme,
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 40, 14, 16),
-              child: Builder(builder: builder),
+    pageBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+        ) {
+          return SweepThemeScope(
+            theme: theme,
+            child: SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 40, 14, 16),
+                  child: Builder(builder: builder),
+                ),
+              ),
             ),
-          ),
-        ),
-      );
-    },
+          );
+        },
     transitionBuilder:
         (
           BuildContext context,
@@ -1050,11 +1053,7 @@ class SweepDialogFrame extends StatelessWidget {
 }
 
 class SweepSheetFrame extends StatelessWidget {
-  const SweepSheetFrame({
-    required this.child,
-    this.maxWidth = 620,
-    super.key,
-  });
+  const SweepSheetFrame({required this.child, this.maxWidth = 620, super.key});
 
   final Widget child;
   final double maxWidth;
@@ -1063,28 +1062,40 @@ class SweepSheetFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      child: SweepSurface(
-        tone: SweepSurfaceTone.raised,
-        borderRadius: BorderRadius.circular(theme.radii.lg),
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              width: 46,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colors.borderStrong,
-                borderRadius: BorderRadius.circular(theme.radii.pill),
-              ),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: maxWidth,
+            maxHeight: constraints.maxHeight,
+          ),
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
+            borderRadius: BorderRadius.circular(theme.radii.lg),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Container(
+                  width: 46,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colors.borderStrong,
+                    borderRadius: BorderRadius.circular(theme.radii.pill),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SingleChildScrollView(
+                    child: SizedBox(width: double.infinity, child: child),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

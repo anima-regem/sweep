@@ -258,6 +258,7 @@ class _ShellDock extends StatelessWidget {
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
     final bool sessionSelected = destination == SweepDestination.session;
+    final double centerGap = sessionSelected ? 108 : 100;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -268,7 +269,7 @@ class _ShellDock extends StatelessWidget {
           borderRadius: BorderRadius.circular(theme.radii.lg),
           padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               Expanded(
                 child: Row(
@@ -287,7 +288,7 @@ class _ShellDock extends StatelessWidget {
                       }).toList(),
                 ),
               ),
-              SizedBox(width: sessionSelected ? 108 : 100),
+              SizedBox(width: centerGap),
               Expanded(
                 child: Row(
                   children:
@@ -377,36 +378,50 @@ class _DockDestinationButton extends StatelessWidget {
 
     return GestureDetector(
       key: ValueKey<String>('dock-${item.name}'),
+      behavior: HitTestBehavior.opaque,
       onTap: () => onSelect(item),
-      child: AnimatedContainer(
-        duration: theme.motion.component,
-        curve: theme.motion.standard,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? theme.colors.primarySoft : const Color(0x00000000),
-          borderRadius: BorderRadius.circular(theme.radii.md),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(
-              item.icon,
-              size: 20,
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool showLabel = constraints.maxWidth >= 48;
+
+          return AnimatedContainer(
+            duration: theme.motion.component,
+            curve: theme.motion.standard,
+            padding: EdgeInsets.symmetric(vertical: showLabel ? 10 : 12),
+            decoration: BoxDecoration(
               color: selected
-                  ? theme.colors.primary
-                  : theme.colors.textSecondary,
+                  ? theme.colors.primarySoft
+                  : const Color(0x00000000),
+              borderRadius: BorderRadius.circular(theme.radii.md),
             ),
-            const SizedBox(height: 6),
-            Text(
-              item.label,
-              style: theme.typography.caption.copyWith(
-                color: selected
-                    ? theme.colors.primary
-                    : theme.colors.textTertiary,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  item.icon,
+                  size: 20,
+                  color: selected
+                      ? theme.colors.primary
+                      : theme.colors.textSecondary,
+                ),
+                if (showLabel) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: theme.typography.caption.copyWith(
+                      color: selected
+                          ? theme.colors.primary
+                          : theme.colors.textTertiary,
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
