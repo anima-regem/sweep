@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../models/sweep_models.dart';
 import '../../state/sweep_controller.dart';
 import '../../utils/formatters.dart';
+import '../components/sweep_primitives.dart';
 import '../widgets/media_tile.dart';
 
 class TrashTab extends ConsumerStatefulWidget {
@@ -21,7 +23,8 @@ class _TrashTabState extends ConsumerState<TrashTab> {
     final SweepController controller = ref.read(
       sweepControllerProvider.notifier,
     );
-    final List<MediaItem> trash = controller.trashItems();
+    final SweepState state = ref.watch(sweepControllerProvider);
+    final List<MediaItem> trash = state.trashPage.items;
 
     if (_selected.any(
       (String id) => !trash.any((MediaItem item) => item.id == id),
@@ -31,114 +34,134 @@ class _TrashTabState extends ConsumerState<TrashTab> {
       );
     }
 
-    final int totalBytes = trash.fold<int>(
-      0,
-      (int sum, MediaItem item) => sum + item.sizeBytes,
-    );
+    final int totalBytes = state.summary.potentialFreedBytes;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+    return SweepPage(
+      eyebrow: 'Review Queue',
+      title: 'Trash checkpoint',
+      subtitle:
+          'Nothing is final until you confirm it here. Restore or commit the dangerous actions.',
       children: <Widget>[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+        SweepReveal(
+          child: SweepSurface(
+            tone: SweepSurfaceTone.danger,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'Deletion Review System',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                const SweepSectionHeader(
+                  title: 'Deletion review',
+                  subtitle:
+                      'Review volume, select what to restore, and confirm permanent removal only when ready.',
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 14),
                 Text(
-                  'You are about to delete ${trash.length} files '
-                  '(${formatBytes(totalBytes)}).',
+                  '${state.trashPage.totalCount} files queued • ${formatBytes(totalBytes)} at risk',
+                  style: SweepTheme.of(context).typography.bodyStrong,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Row(
                   children: <Widget>[
                     Expanded(
-                      child: OutlinedButton.icon(
+                      child: SweepButton(
+                        label: 'Restore selected',
+                        icon: CupertinoIcons.refresh,
+                        variant: SweepButtonVariant.secondary,
                         onPressed: _selected.isEmpty
                             ? null
                             : () {
                                 controller.restoreItems(_selected);
                                 setState(_selected.clear);
                               },
-                        icon: const Icon(Icons.restore_outlined),
-                        label: const Text('Restore Selected'),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFF25F5C),
-                        ),
+                      child: SweepButton(
+                        label: 'Delete selected',
+                        icon: CupertinoIcons.trash,
+                        variant: SweepButtonVariant.danger,
                         onPressed: _selected.isEmpty
                             ? null
                             : () => _confirmDelete(
                                 context,
                                 count: _selected.length,
-                                onConfirm: () {
-                                  controller.permanentlyDeleteItems(_selected);
+                                onConfirm: () async {
+                                  await controller.permanentlyDeleteItems(
+                                    _selected,
+                                  );
                                   setState(_selected.clear);
                                 },
                               ),
-                        icon: const Icon(Icons.delete_forever_outlined),
-                        label: const Text('Delete Selected'),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: trash.isEmpty
-                        ? null
-                        : () => _confirmDelete(
-                            context,
-                            count: trash.length,
-                            onConfirm: () {
-                              controller.permanentlyDeleteItems(
-                                trash.map((MediaItem item) => item.id).toSet(),
-                              );
-                              setState(_selected.clear);
-                            },
-                          ),
-                    icon: const Icon(Icons.warning_amber_outlined),
-                    label: const Text('Delete All'),
-                  ),
+                const SizedBox(height: 10),
+                SweepButton(
+                  label: 'Delete entire queue',
+                  icon: CupertinoIcons.exclamationmark_triangle,
+                  expand: true,
+                  variant: SweepButtonVariant.ghost,
+                  onPressed: trash.isEmpty
+                      ? null
+                      : () => _confirmDelete(
+                          context,
+                          count: trash.length,
+                          onConfirm: () async {
+                            await controller.permanentlyDeleteItems(
+                              trash.map((MediaItem item) => item.id).toSet(),
+                            );
+                            setState(_selected.clear);
+                          },
+                        ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         if (trash.isEmpty)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.only(top: 24),
-              child: Text(
-                'Trash is empty. Swipe left in Swipe Mode to queue media.',
-              ),
+          const SweepReveal(
+            delay: Duration(milliseconds: 70),
+            child: SweepEmptyState(
+              icon: CupertinoIcons.sparkles,
+              title: 'Trash is empty',
+              body:
+                  'Swipe left inside Session to queue media for review and deletion.',
             ),
           )
         else
-          ...trash.map(
-            (MediaItem item) => MediaTile(
-              item: item,
-              selected: _selected.contains(item.id),
-              onToggle: () {
-                setState(() {
-                  if (_selected.contains(item.id)) {
-                    _selected.remove(item.id);
-                  } else {
-                    _selected.add(item.id);
-                  }
-                });
-              },
+          SweepReveal(
+            delay: const Duration(milliseconds: 70),
+            child: Column(
+              children: <Widget>[
+                ...trash.map(
+                  (MediaItem item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: MediaTile(
+                      item: item,
+                      selected: _selected.contains(item.id),
+                      onToggle: () {
+                        setState(() {
+                          if (_selected.contains(item.id)) {
+                            _selected.remove(item.id);
+                          } else {
+                            _selected.add(item.id);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                if (state.trashPage.hasMore)
+                  SweepButton(
+                    label: 'Load more queued items',
+                    icon: CupertinoIcons.chevron_down_circle,
+                    expand: true,
+                    variant: SweepButtonVariant.secondary,
+                    onPressed: controller.loadMoreTrashItems,
+                  ),
+              ],
             ),
           ),
       ],
@@ -148,32 +171,52 @@ class _TrashTabState extends ConsumerState<TrashTab> {
   Future<void> _confirmDelete(
     BuildContext context, {
     required int count,
-    required VoidCallback onConfirm,
+    required Future<void> Function() onConfirm,
   }) async {
-    await showDialog<void>(
+    await showSweepDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Permanent Delete'),
-          content: Text(
-            'This will permanently remove $count files from Sweep index. Continue?',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFF25F5C),
+        return SweepDialogFrame(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const SweepSectionHeader(
+                title: 'Permanent delete',
+                subtitle:
+                    'This removes the items from the Sweep index and attempts to delete real gallery assets when available.',
               ),
-              onPressed: () {
-                onConfirm();
-                Navigator.of(context).pop();
-              },
-              child: const Text('Delete'),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'Continue with $count file${count == 1 ? '' : 's'}?',
+                style: SweepTheme.of(context).typography.bodyStrong,
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Cancel',
+                      variant: SweepButtonVariant.ghost,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Delete',
+                      variant: SweepButtonVariant.danger,
+                      onPressed: () async {
+                        final NavigatorState navigator = Navigator.of(context);
+                        await onConfirm();
+                        navigator.pop();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );

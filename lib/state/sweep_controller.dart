@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 
-import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:photo_manager/photo_manager.dart';
 
+import '../data/gallery_index_store.dart';
+import '../data/gallery_repository.dart';
 import '../data/gallery_scanner.dart';
-import '../data/index_store.dart';
+import '../data/user_action_store.dart';
 import '../models/sweep_models.dart';
 
 final Provider<GalleryScanner> galleryScannerProvider =
@@ -13,17 +14,31 @@ final Provider<GalleryScanner> galleryScannerProvider =
       return const GalleryScanner();
     });
 
-final Provider<IndexStore> indexStoreProvider = Provider<IndexStore>((Ref ref) {
-  return IndexStore();
-});
+final Provider<GalleryIndexStore> galleryIndexStoreProvider =
+    Provider<GalleryIndexStore>((Ref ref) {
+      return GalleryIndexStore();
+    });
+
+final Provider<UserActionStore> userActionStoreProvider =
+    Provider<UserActionStore>((Ref ref) {
+      return UserActionStore();
+    });
+
+final Provider<GalleryRepository> galleryRepositoryProvider =
+    Provider<GalleryRepository>((Ref ref) {
+      return LocalGalleryRepository(
+        scanner: ref.read(galleryScannerProvider),
+        galleryStore: ref.read(galleryIndexStoreProvider),
+        userStore: ref.read(userActionStoreProvider),
+      );
+    });
 
 final StateNotifierProvider<SweepController, SweepState>
 sweepControllerProvider = StateNotifierProvider<SweepController, SweepState>((
   Ref ref,
 ) {
   final SweepController controller = SweepController(
-    scanner: ref.read(galleryScannerProvider),
-    store: ref.read(indexStoreProvider),
+    repository: ref.read(galleryRepositoryProvider),
   );
   controller.initialize();
   return controller;
@@ -33,7 +48,6 @@ class SweepState {
   const SweepState({
     required this.isLoading,
     required this.initialized,
-    required this.media,
     required this.discoveryMode,
     required this.scanScope,
     required this.specificFolder,
@@ -47,19 +61,33 @@ class SweepState {
     required this.lastSessionFreedBytes,
     required this.showCompletion,
     required this.statusMessage,
+    required this.summary,
+    required this.scanProgress,
+    required this.activePage,
+    required this.trashPage,
+    required this.sessionQueue,
+    required this.folders,
+    required this.taggedCollections,
+    required this.cleanupSuggestions,
+    required this.randomSeed,
   });
 
   factory SweepState.initial() {
-    return const SweepState(
+    return SweepState(
       isLoading: false,
       initialized: false,
-      media: <MediaItem>[],
       discoveryMode: DiscoveryMode.all,
       scanScope: ScanScope.entireGallery,
       specificFolder: null,
-      decisions: <String, SwipeDecision>{},
-      selectedBulkIds: <String>{},
-      customTags: <String>['Friends', 'Work', 'Travel', 'Family', 'Documents'],
+      decisions: const <String, SwipeDecision>{},
+      selectedBulkIds: const <String>{},
+      customTags: const <String>[
+        'Friends',
+        'Work',
+        'Travel',
+        'Family',
+        'Documents',
+      ],
       sessionsCompleted: 0,
       currentSessionProcessed: 0,
       currentSessionFreedBytes: 0,
@@ -67,12 +95,20 @@ class SweepState {
       lastSessionFreedBytes: 0,
       showCompletion: false,
       statusMessage: null,
+      summary: const GallerySummary.empty(),
+      scanProgress: const ScanProgress.idle(),
+      activePage: const GalleryPage(),
+      trashPage: const GalleryPage(),
+      sessionQueue: const <MediaItem>[],
+      folders: const <String>[],
+      taggedCollections: const <String, List<MediaItem>>{},
+      cleanupSuggestions: const <CleanupSuggestion>[],
+      randomSeed: 73,
     );
   }
 
   final bool isLoading;
   final bool initialized;
-  final List<MediaItem> media;
   final DiscoveryMode discoveryMode;
   final ScanScope scanScope;
   final String? specificFolder;
@@ -86,11 +122,19 @@ class SweepState {
   final int lastSessionFreedBytes;
   final bool showCompletion;
   final String? statusMessage;
+  final GallerySummary summary;
+  final ScanProgress scanProgress;
+  final GalleryPage activePage;
+  final GalleryPage trashPage;
+  final List<MediaItem> sessionQueue;
+  final List<String> folders;
+  final Map<String, List<MediaItem>> taggedCollections;
+  final List<CleanupSuggestion> cleanupSuggestions;
+  final int randomSeed;
 
   SweepState copyWith({
     bool? isLoading,
     bool? initialized,
-    List<MediaItem>? media,
     DiscoveryMode? discoveryMode,
     ScanScope? scanScope,
     String? specificFolder,
@@ -106,11 +150,19 @@ class SweepState {
     bool? showCompletion,
     String? statusMessage,
     bool clearStatusMessage = false,
+    GallerySummary? summary,
+    ScanProgress? scanProgress,
+    GalleryPage? activePage,
+    GalleryPage? trashPage,
+    List<MediaItem>? sessionQueue,
+    List<String>? folders,
+    Map<String, List<MediaItem>>? taggedCollections,
+    List<CleanupSuggestion>? cleanupSuggestions,
+    int? randomSeed,
   }) {
     return SweepState(
       isLoading: isLoading ?? this.isLoading,
       initialized: initialized ?? this.initialized,
-      media: media ?? this.media,
       discoveryMode: discoveryMode ?? this.discoveryMode,
       scanScope: scanScope ?? this.scanScope,
       specificFolder: clearSpecificFolder
@@ -131,82 +183,30 @@ class SweepState {
       statusMessage: clearStatusMessage
           ? null
           : (statusMessage ?? this.statusMessage),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'media': media.map((MediaItem item) => item.toJson()).toList(),
-      'discoveryMode': discoveryMode.name,
-      'scanScope': scanScope.name,
-      'specificFolder': specificFolder,
-      'decisions': decisions.map(
-        (String key, SwipeDecision value) =>
-            MapEntry<String, String>(key, value.name),
-      ),
-      'selectedBulkIds': selectedBulkIds.toList(),
-      'customTags': customTags,
-      'sessionsCompleted': sessionsCompleted,
-      'lastSessionProcessed': lastSessionProcessed,
-      'lastSessionFreedBytes': lastSessionFreedBytes,
-    };
-  }
-
-  factory SweepState.fromJson(Map<String, dynamic> json) {
-    final Map<String, SwipeDecision> decodedDecisions =
-        ((json['decisions'] as Map<dynamic, dynamic>? ??
-                const <dynamic, dynamic>{}))
-            .map(
-              (dynamic key, dynamic value) => MapEntry<String, SwipeDecision>(
-                key as String,
-                SwipeDecision.values.byName(value as String),
-              ),
-            );
-
-    return SweepState(
-      isLoading: false,
-      initialized: true,
-      media: (json['media'] as List<dynamic>? ?? const <dynamic>[])
-          .map(
-            (dynamic value) =>
-                MediaItem.fromJson(value as Map<dynamic, dynamic>),
-          )
-          .toList(),
-      discoveryMode: DiscoveryMode.values.byName(
-        json['discoveryMode'] as String? ?? DiscoveryMode.all.name,
-      ),
-      scanScope: ScanScope.values.byName(
-        json['scanScope'] as String? ?? ScanScope.entireGallery.name,
-      ),
-      specificFolder: json['specificFolder'] as String?,
-      decisions: decodedDecisions,
-      selectedBulkIds:
-          (json['selectedBulkIds'] as List<dynamic>? ?? const <dynamic>[])
-              .map((dynamic value) => value as String)
-              .toSet(),
-      customTags: (json['customTags'] as List<dynamic>? ?? const <dynamic>[])
-          .map((dynamic value) => value as String)
-          .toList(),
-      sessionsCompleted: json['sessionsCompleted'] as int? ?? 0,
-      currentSessionProcessed: 0,
-      currentSessionFreedBytes: 0,
-      lastSessionProcessed: json['lastSessionProcessed'] as int? ?? 0,
-      lastSessionFreedBytes: json['lastSessionFreedBytes'] as int? ?? 0,
-      showCompletion: false,
-      statusMessage: null,
+      summary: summary ?? this.summary,
+      scanProgress: scanProgress ?? this.scanProgress,
+      activePage: activePage ?? this.activePage,
+      trashPage: trashPage ?? this.trashPage,
+      sessionQueue: sessionQueue ?? this.sessionQueue,
+      folders: folders ?? this.folders,
+      taggedCollections: taggedCollections ?? this.taggedCollections,
+      cleanupSuggestions: cleanupSuggestions ?? this.cleanupSuggestions,
+      randomSeed: randomSeed ?? this.randomSeed,
     );
   }
 }
 
 class SweepController extends StateNotifier<SweepState> {
-  SweepController({required GalleryScanner scanner, required IndexStore store})
-    : _scanner = scanner,
-      _store = store,
+  SweepController({required GalleryRepository repository})
+    : _repository = repository,
       _random = Random(),
       super(SweepState.initial());
 
-  final GalleryScanner _scanner;
-  final IndexStore _store;
+  static const int _explorePageSize = 24;
+  static const int _trashPageSize = 36;
+  static const int _sessionQueueSize = 16;
+
+  final GalleryRepository _repository;
   final Random _random;
 
   Future<void> initialize() async {
@@ -216,61 +216,71 @@ class SweepController extends StateNotifier<SweepState> {
 
     state = state.copyWith(
       isLoading: true,
-      statusMessage: 'Loading local index...',
+      statusMessage: 'Loading gallery index...',
     );
 
-    await _store.ensureReady();
-    final Map<String, dynamic>? persisted = await _store.loadState();
+    final RepositoryBootstrap bootstrap = await _repository.initialize();
+    final int randomSeed = _random.nextInt(1 << 30);
 
-    if (persisted != null) {
-      state = SweepState.fromJson(
-        persisted,
-      ).copyWith(isLoading: false, initialized: true, clearStatusMessage: true);
-      return;
+    state = state.copyWith(
+      isLoading: false,
+      initialized: true,
+      discoveryMode: bootstrap.discoveryMode,
+      scanScope: bootstrap.scanScope,
+      specificFolder: bootstrap.specificFolder,
+      decisions: bootstrap.decisions,
+      customTags: bootstrap.customTags,
+      sessionsCompleted: bootstrap.sessionsCompleted,
+      lastSessionProcessed: bootstrap.lastSessionProcessed,
+      lastSessionFreedBytes: bootstrap.lastSessionFreedBytes,
+      summary: bootstrap.summary,
+      folders: bootstrap.folders,
+      cleanupSuggestions: _repository.suggestions(),
+      randomSeed: randomSeed,
+      statusMessage: bootstrap.hasIndexedMedia
+          ? 'Gallery index ready'
+          : 'Indexing gallery...',
+    );
+
+    _refreshLoadedViews(resetActivePage: true, resetTrashPage: true);
+
+    if (!bootstrap.hasIndexedMedia) {
+      unawaited(scanGallery(scope: state.scanScope));
     }
-
-    await scanGallery(scope: ScanScope.entireGallery);
   }
 
   Future<void> scanGallery({ScanScope? scope, String? specificFolder}) async {
     final ScanScope selectedScope = scope ?? state.scanScope;
+    final DiscoveryMode defaultMode = _modeForScope(selectedScope);
+    final String? nextFolder = selectedScope == ScanScope.specificFolder
+        ? specificFolder
+        : state.specificFolder;
 
     state = state.copyWith(
       isLoading: true,
-      statusMessage:
-          'Scanning gallery...'
-          ' (${selectedScope.label})',
+      statusMessage: 'Scanning gallery... (${selectedScope.label})',
       scanScope: selectedScope,
-      specificFolder: specificFolder,
+      discoveryMode: defaultMode,
+      specificFolder: nextFolder,
       clearSpecificFolder: selectedScope != ScanScope.specificFolder,
       selectedBulkIds: <String>{},
       currentSessionProcessed: 0,
       currentSessionFreedBytes: 0,
       showCompletion: false,
     );
+    await _persistPreferences();
+    _refreshLoadedViews(resetActivePage: true, resetTrashPage: false);
 
-    final List<MediaItem> scanned = await _scanner.scan(
-      scope: selectedScope,
-      specificFolder: specificFolder,
+    unawaited(
+      _repository.startScan(
+        scope: selectedScope,
+        specificFolder: nextFolder,
+        onProgress: _handleScanProgress,
+        onDataChanged: () {
+          _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
+        },
+      ),
     );
-
-    final DiscoveryMode defaultMode = _modeForScope(selectedScope);
-
-    state = state.copyWith(
-      isLoading: false,
-      initialized: true,
-      media: scanned,
-      decisions: <String, SwipeDecision>{},
-      selectedBulkIds: <String>{},
-      discoveryMode: defaultMode,
-      clearSpecificFolder: selectedScope != ScanScope.specificFolder,
-      specificFolder: selectedScope == ScanScope.specificFolder
-          ? specificFolder
-          : state.specificFolder,
-      statusMessage: 'Scan complete: ${scanned.length} items indexed',
-    );
-
-    _persist();
   }
 
   void setDiscoveryMode(DiscoveryMode mode, {String? folderName}) {
@@ -283,47 +293,42 @@ class SweepController extends StateNotifier<SweepState> {
       selectedBulkIds: <String>{},
       showCompletion: false,
       clearStatusMessage: true,
+      randomSeed: mode == DiscoveryMode.random
+          ? _random.nextInt(1 << 30)
+          : state.randomSeed,
     );
 
-    _persist();
+    unawaited(_persistPreferences());
+    _refreshLoadedViews(resetActivePage: true, resetTrashPage: false);
   }
 
-  List<MediaItem> mediaForActiveMode({bool includeProcessed = true}) {
-    final Iterable<MediaItem> byMode = _mediaByMode(state.discoveryMode);
-
-    final List<MediaItem> filtered = byMode.where((MediaItem item) {
-      if (includeProcessed) {
-        return true;
-      }
-      return !state.decisions.containsKey(item.id);
-    }).toList();
-
-    switch (state.discoveryMode) {
-      case DiscoveryMode.largestFiles:
-        filtered.sort(
-          (MediaItem a, MediaItem b) => b.sizeBytes.compareTo(a.sizeBytes),
-        );
-        break;
-      case DiscoveryMode.oldestMedia:
-        filtered.sort(
-          (MediaItem a, MediaItem b) => a.createdAt.compareTo(b.createdAt),
-        );
-        break;
-      case DiscoveryMode.random:
-        return shuffled(filtered, _random);
-      default:
-        filtered.sort(
-          (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
-        );
-        break;
+  Future<void> loadMoreActiveMedia() async {
+    if (!state.activePage.hasMore) {
+      return;
     }
 
-    return filtered;
+    _refreshActivePage(targetCount: state.activePage.items.length + _explorePageSize);
   }
 
-  List<MediaItem> swipeQueue() {
-    return mediaForActiveMode(includeProcessed: false);
+  Future<void> loadMoreTrashItems() async {
+    if (!state.trashPage.hasMore) {
+      return;
+    }
+
+    _refreshTrashPage(targetCount: state.trashPage.items.length + _trashPageSize);
   }
+
+  List<MediaItem> swipeQueue() => state.sessionQueue;
+
+  List<MediaItem> trashItems() => state.trashPage.items;
+
+  List<String> folders() => state.folders;
+
+  Map<String, List<MediaItem>> taggedCollections() => state.taggedCollections;
+
+  GallerySummary storageInsights() => state.summary;
+
+  List<CleanupSuggestion> suggestions() => state.cleanupSuggestions;
 
   void registerSwipe(
     MediaItem item,
@@ -333,51 +338,48 @@ class SweepController extends StateNotifier<SweepState> {
   }) {
     final Map<String, SwipeDecision> nextDecisions =
         Map<String, SwipeDecision>.from(state.decisions);
-
     int nextFreedBytes = state.currentSessionFreedBytes;
 
     switch (direction) {
       case SwipeDirection.left:
         nextDecisions[item.id] = SwipeDecision.delete;
-        nextFreedBytes += item.sizeBytes;
+        nextFreedBytes += item.safeSizeBytes;
+        _repository.setDecision(item.id, SwipeDecision.delete);
         break;
       case SwipeDirection.right:
         nextDecisions[item.id] = SwipeDecision.keep;
+        _repository.setDecision(item.id, SwipeDecision.keep);
         break;
       case SwipeDirection.up:
         nextDecisions[item.id] = SwipeDecision.tag;
+        _repository.setDecision(item.id, SwipeDecision.tag);
         break;
       case SwipeDirection.down:
         nextDecisions[item.id] = SwipeDecision.skip;
+        _repository.setDecision(item.id, SwipeDecision.skip);
         break;
     }
 
-    List<MediaItem> nextMedia = state.media;
-    if (tags.isNotEmpty || moveToFolder != null) {
-      nextMedia = _updateMediaItem(item.id, (MediaItem previous) {
-        final Set<String> mergedTags = <String>{
-          ...previous.tags,
-          ...tags.map((String value) => value.trim()),
-        };
-        return previous.copyWith(
-          tags: mergedTags.where((String value) => value.isNotEmpty).toList(),
-          movedToFolder: moveToFolder ?? previous.movedToFolder,
-        );
-      });
+    if (tags.isNotEmpty) {
+      _repository.applyTags(item.id, tags);
+    }
+    if (moveToFolder != null) {
+      _repository.applyMove(item.id, moveToFolder);
+      unawaited(_repository.moveAssets(<String>{item.id}, moveToFolder));
     }
 
+    final int currentProcessed = state.currentSessionProcessed + 1;
+    final List<MediaItem> pendingAfterAction = _repository.fetchQueue(
+      mode: state.discoveryMode,
+      specificFolder: state.specificFolder,
+      limit: 1,
+      randomSeed: state.randomSeed,
+    );
+
+    bool showCompletion = false;
+    int sessionsCompleted = state.sessionsCompleted;
     int lastSessionProcessed = state.lastSessionProcessed;
     int lastSessionFreed = state.lastSessionFreedBytes;
-    int sessionsCompleted = state.sessionsCompleted;
-    bool showCompletion = false;
-
-    final int currentProcessed = state.currentSessionProcessed + 1;
-    final List<MediaItem> pendingAfterAction =
-        mediaForMode(state.discoveryMode, source: nextMedia)
-            .where(
-              (MediaItem mediaItem) => !nextDecisions.containsKey(mediaItem.id),
-            )
-            .toList();
 
     if (pendingAfterAction.isEmpty && currentProcessed > 0) {
       showCompletion = true;
@@ -387,7 +389,6 @@ class SweepController extends StateNotifier<SweepState> {
     }
 
     state = state.copyWith(
-      media: nextMedia,
       decisions: nextDecisions,
       currentSessionProcessed: showCompletion ? 0 : currentProcessed,
       currentSessionFreedBytes: showCompletion ? 0 : nextFreedBytes,
@@ -397,8 +398,8 @@ class SweepController extends StateNotifier<SweepState> {
       showCompletion: showCompletion,
       clearStatusMessage: true,
     );
-
-    _persist();
+    unawaited(_persistPreferences());
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void addCustomTag(String tag) {
@@ -407,29 +408,17 @@ class SweepController extends StateNotifier<SweepState> {
       return;
     }
 
-    state = state.copyWith(
-      customTags: <String>[...state.customTags, normalized],
-    );
-    _persist();
+    _repository.addCustomTag(normalized);
+    state = state.copyWith(customTags: <String>[...state.customTags, normalized]);
+    unawaited(_persistPreferences());
   }
 
   void tagItem(String mediaId, List<String> tags) {
-    final List<String> normalized = tags
-        .map((String value) => value.trim())
-        .where((String value) => value.isNotEmpty)
-        .toList();
-
-    if (normalized.isEmpty) {
+    if (tags.isEmpty) {
       return;
     }
-
-    final List<MediaItem> updated = _updateMediaItem(mediaId, (MediaItem item) {
-      final Set<String> merged = <String>{...item.tags, ...normalized};
-      return item.copyWith(tags: merged.toList());
-    });
-
-    state = state.copyWith(media: updated);
-    _persist();
+    _repository.applyTags(mediaId, tags);
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void moveItem(String mediaId, String folderName) {
@@ -438,13 +427,9 @@ class SweepController extends StateNotifier<SweepState> {
       return;
     }
 
-    final List<MediaItem> updated = _updateMediaItem(mediaId, (MediaItem item) {
-      return item.copyWith(movedToFolder: normalized);
-    });
-
-    state = state.copyWith(media: updated);
-    _persist();
-    _attemptMoveAssets(<String>{mediaId}, normalized);
+    _repository.applyMove(mediaId, normalized);
+    unawaited(_repository.moveAssets(<String>{mediaId}, normalized));
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void dismissCompletion() {
@@ -455,21 +440,6 @@ class SweepController extends StateNotifier<SweepState> {
     state = state.copyWith(showCompletion: false);
   }
 
-  List<MediaItem> trashItems() {
-    final Set<String> trashIds = state.decisions.entries
-        .where(
-          (MapEntry<String, SwipeDecision> entry) =>
-              entry.value == SwipeDecision.delete,
-        )
-        .map((MapEntry<String, SwipeDecision> entry) => entry.key)
-        .toSet();
-
-    return state.media
-        .where((MediaItem item) => trashIds.contains(item.id))
-        .toList()
-      ..sort((MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt));
-  }
-
   void restoreItems(Set<String> ids) {
     if (ids.isEmpty) {
       return;
@@ -478,9 +448,8 @@ class SweepController extends StateNotifier<SweepState> {
     final Map<String, SwipeDecision> nextDecisions =
         Map<String, SwipeDecision>.from(state.decisions);
     for (final String id in ids) {
-      if (nextDecisions[id] == SwipeDecision.delete) {
-        nextDecisions.remove(id);
-      }
+      nextDecisions.remove(id);
+      _repository.clearDecision(id);
     }
 
     final Set<String> nextSelected = Set<String>.from(state.selectedBulkIds)
@@ -491,8 +460,8 @@ class SweepController extends StateNotifier<SweepState> {
       selectedBulkIds: nextSelected,
       clearStatusMessage: true,
     );
-
-    _persist();
+    unawaited(_persistPreferences());
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   Future<void> permanentlyDeleteItems(Set<String> ids) async {
@@ -500,41 +469,22 @@ class SweepController extends StateNotifier<SweepState> {
       return;
     }
 
-    final Set<String> idSet = Set<String>.from(ids);
-    final List<String> assetIds = state.media
-        .where((MediaItem item) => idSet.contains(item.id))
-        .map((MediaItem item) => item.assetId)
-        .whereType<String>()
-        .toList();
-
-    if (assetIds.isNotEmpty) {
-      try {
-        await PhotoManager.editor.deleteWithIds(assetIds);
-      } catch (_) {
-        // Index cleanup still proceeds if device delete fails.
-      }
-    }
-
-    final List<MediaItem> nextMedia = state.media
-        .where((MediaItem item) => !idSet.contains(item.id))
-        .toList();
+    await _repository.permanentlyDeleteItems(ids);
 
     final Map<String, SwipeDecision> nextDecisions =
-        Map<String, SwipeDecision>.from(state.decisions)..removeWhere(
-          (String key, SwipeDecision value) => idSet.contains(key),
-        );
+        Map<String, SwipeDecision>.from(state.decisions)
+          ..removeWhere((String key, SwipeDecision value) => ids.contains(key));
 
     final Set<String> nextSelected = Set<String>.from(state.selectedBulkIds)
-      ..removeAll(idSet);
+      ..removeAll(ids);
 
     state = state.copyWith(
-      media: nextMedia,
       decisions: nextDecisions,
       selectedBulkIds: nextSelected,
       clearStatusMessage: true,
     );
-
-    _persist();
+    await _persistPreferences();
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void markSelectedForDeletion() {
@@ -544,13 +494,14 @@ class SweepController extends StateNotifier<SweepState> {
 
     final Map<String, SwipeDecision> nextDecisions =
         Map<String, SwipeDecision>.from(state.decisions);
-
     for (final String id in state.selectedBulkIds) {
       nextDecisions[id] = SwipeDecision.delete;
+      _repository.setDecision(id, SwipeDecision.delete);
     }
 
     state = state.copyWith(decisions: nextDecisions);
-    _persist();
+    unawaited(_persistPreferences());
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void bulkAssignTag(String tag) {
@@ -559,22 +510,16 @@ class SweepController extends StateNotifier<SweepState> {
       return;
     }
 
-    List<MediaItem> updated = state.media;
     for (final String id in state.selectedBulkIds) {
-      updated = _updateMediaItemFrom(updated, id, (MediaItem item) {
-        final Set<String> merged = <String>{...item.tags, normalized};
-        return item.copyWith(tags: merged.toList());
-      });
+      _repository.applyTags(id, <String>[normalized]);
     }
-
-    state = state.copyWith(media: updated);
     if (!state.customTags.contains(normalized)) {
-      state = state.copyWith(
-        customTags: <String>[...state.customTags, normalized],
-      );
+      _repository.addCustomTag(normalized);
+      state = state.copyWith(customTags: <String>[...state.customTags, normalized]);
     }
 
-    _persist();
+    unawaited(_persistPreferences());
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void bulkMoveToFolder(String folderName) {
@@ -583,18 +528,11 @@ class SweepController extends StateNotifier<SweepState> {
       return;
     }
 
-    List<MediaItem> updated = state.media;
     for (final String id in state.selectedBulkIds) {
-      updated = _updateMediaItemFrom(
-        updated,
-        id,
-        (MediaItem item) => item.copyWith(movedToFolder: normalized),
-      );
+      _repository.applyMove(id, normalized);
     }
-
-    state = state.copyWith(media: updated);
-    _persist();
-    _attemptMoveAssets(state.selectedBulkIds, normalized);
+    unawaited(_repository.moveAssets(state.selectedBulkIds, normalized));
+    _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
   }
 
   void toggleBulkSelection(String mediaId) {
@@ -615,194 +553,113 @@ class SweepController extends StateNotifier<SweepState> {
     state = state.copyWith(selectedBulkIds: <String>{});
   }
 
-  StorageInsights storageInsights() {
-    final List<MediaItem> source = state.media;
-    final int totalSize = source.fold<int>(
-      0,
-      (int sum, MediaItem item) => sum + item.sizeBytes,
-    );
-
-    final int duplicateCount = source
-        .where((MediaItem item) => item.isDuplicate)
-        .length;
-
-    final int potentialFreedBytes = trashItems().fold<int>(
-      0,
-      (int sum, MediaItem item) => sum + item.sizeBytes,
-    );
-
-    final List<MediaItem> largestVideos = source
-        .where((MediaItem item) => item.kind == MediaKind.video)
-        .sorted(
-          (MediaItem a, MediaItem b) => b.sizeBytes.compareTo(a.sizeBytes),
-        )
-        .take(5)
-        .toList();
-
-    final Map<String, List<MediaItem>> groupedByFolder =
-        groupBy<MediaItem, String>(
-          source,
-          (MediaItem item) => item.resolvedFolder,
-        );
-
-    final List<FolderUsage> folderUsage = groupedByFolder.entries
-        .map((MapEntry<String, List<MediaItem>> entry) {
-          final int size = entry.value.fold<int>(
-            0,
-            (int sum, MediaItem item) => sum + item.sizeBytes,
-          );
-          return FolderUsage(
-            folder: entry.key,
-            itemCount: entry.value.length,
-            totalSizeBytes: size,
-          );
-        })
-        .sorted(
-          (FolderUsage a, FolderUsage b) =>
-              b.totalSizeBytes.compareTo(a.totalSizeBytes),
-        );
-
-    return StorageInsights(
-      totalMediaCount: source.length,
-      totalSizeBytes: totalSize,
-      duplicateCount: duplicateCount,
-      potentialFreedBytes: potentialFreedBytes,
-      largestVideos: largestVideos,
-      folderUsage: folderUsage,
+  void _handleScanProgress(ScanProgress progress) {
+    state = state.copyWith(
+      isLoading: progress.isRunning,
+      scanProgress: progress,
+      statusMessage:
+          '${progress.label} • ${progress.indexedCount} indexed'
+          '${progress.enrichedCount > 0 ? ' • ${progress.enrichedCount} refined' : ''}',
+      summary: _repository.summary,
+      folders: _repository.folders,
+      cleanupSuggestions: _repository.suggestions(),
     );
   }
 
-  List<CleanupSuggestion> suggestions() {
-    final List<MediaItem> screenshots = mediaForMode(
-      DiscoveryMode.screenshots,
-      source: state.media,
-    );
-    final List<MediaItem> largeFiles = mediaForMode(
-      DiscoveryMode.largestFiles,
-      source: state.media,
-    ).take(50).toList();
-    final List<MediaItem> oldMedia = mediaForMode(
-      DiscoveryMode.oldestMedia,
-      source: state.media,
-    ).where((MediaItem item) => item.createdAt.year <= 2019).toList();
-
-    return <CleanupSuggestion>[
-      CleanupSuggestion(
-        title: 'Clean screenshots',
-        subtitle: 'Quick win for clutter and storage',
-        mode: DiscoveryMode.screenshots,
-        itemCount: screenshots.length,
-        estimatedBytes: screenshots.fold<int>(
-          0,
-          (int sum, MediaItem item) => sum + item.sizeBytes,
-        ),
-      ),
-      CleanupSuggestion(
-        title: 'Large videos',
-        subtitle: 'Highest storage impact first',
-        mode: DiscoveryMode.largestFiles,
-        itemCount: largeFiles.length,
-        estimatedBytes: largeFiles.fold<int>(
-          0,
-          (int sum, MediaItem item) => sum + item.sizeBytes,
-        ),
-      ),
-      CleanupSuggestion(
-        title: 'Old photos (<=2019)',
-        subtitle: 'Rediscover forgotten media',
-        mode: DiscoveryMode.oldestMedia,
-        itemCount: oldMedia.length,
-        estimatedBytes: oldMedia.fold<int>(
-          0,
-          (int sum, MediaItem item) => sum + item.sizeBytes,
-        ),
-      ),
-    ];
-  }
-
-  List<String> folders() {
-    return state.media
-        .map((MediaItem item) => item.resolvedFolder)
-        .toSet()
-        .toList()
-      ..sort();
-  }
-
-  Map<String, List<MediaItem>> taggedCollections() {
-    final Map<String, List<MediaItem>> collections =
-        <String, List<MediaItem>>{};
-
-    for (final MediaItem item in state.media) {
-      for (final String tag in item.tags) {
-        collections.putIfAbsent(tag, () => <MediaItem>[]).add(item);
-      }
-    }
-
-    final List<String> keys = collections.keys.toList()..sort();
-    return <String, List<MediaItem>>{
-      for (final String key in keys)
-        key: collections[key]!
-          ..sort(
-            (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
-          ),
-    };
-  }
-
-  List<MediaItem> mediaForMode(
-    DiscoveryMode mode, {
-    required List<MediaItem> source,
+  void _refreshLoadedViews({
+    required bool resetActivePage,
+    required bool resetTrashPage,
   }) {
-    return _mediaByMode(mode, source: source).toList();
+    _refreshSummary();
+    _refreshActivePage(
+      targetCount: resetActivePage
+          ? _explorePageSize
+          : max(_explorePageSize, state.activePage.items.length),
+    );
+    _refreshSessionQueue();
+    _refreshTrashPage(
+      targetCount: resetTrashPage
+          ? _trashPageSize
+          : max(_trashPageSize, state.trashPage.items.length),
+    );
+    _refreshCollections();
   }
 
-  Iterable<MediaItem> _mediaByMode(
-    DiscoveryMode mode, {
-    List<MediaItem>? source,
-  }) {
-    final List<MediaItem> pool = source ?? state.media;
+  void _refreshSummary() {
+    state = state.copyWith(
+      summary: _repository.summary,
+      folders: _repository.folders,
+      cleanupSuggestions: _repository.suggestions(),
+    );
+  }
 
-    switch (mode) {
-      case DiscoveryMode.all:
-        return pool;
-      case DiscoveryMode.largestFiles:
-        return pool;
-      case DiscoveryMode.oldestMedia:
-        return pool;
-      case DiscoveryMode.random:
-        return pool;
-      case DiscoveryMode.duplicates:
-        return pool.where((MediaItem item) => item.isDuplicate);
-      case DiscoveryMode.screenshots:
-        return pool.where(
-          (MediaItem item) =>
-              item.resolvedFolder.toLowerCase().contains('screenshot'),
-        );
-      case DiscoveryMode.whatsapp:
-        return pool.where(
-          (MediaItem item) =>
-              item.resolvedFolder.toLowerCase().contains('whatsapp'),
-        );
-      case DiscoveryMode.cameraRoll:
-        return pool.where((MediaItem item) {
-          final String folder = item.resolvedFolder.toLowerCase();
-          return folder.contains('camera') || folder.contains('dcim');
-        });
-      case DiscoveryMode.downloads:
-        return pool.where(
-          (MediaItem item) =>
-              item.resolvedFolder.toLowerCase().contains('download'),
-        );
-      case DiscoveryMode.specificFolder:
-        if (state.specificFolder == null ||
-            state.specificFolder!.trim().isEmpty) {
-          return pool;
-        }
-        return pool.where(
-          (MediaItem item) =>
-              item.resolvedFolder.toLowerCase() ==
-              state.specificFolder!.toLowerCase(),
-        );
-    }
+  void _refreshActivePage({required int targetCount}) {
+    final GalleryPage page = _repository.fetchPage(
+      mode: state.discoveryMode,
+      specificFolder: state.specificFolder,
+      offset: 0,
+      limit: targetCount,
+      includeProcessed: true,
+      randomSeed: state.randomSeed,
+    );
+    _repository.prioritizeForEnrichment(
+      page.items.map((MediaItem item) => item.id),
+      onProgress: _handleScanProgress,
+      onDataChanged: () {
+        _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
+      },
+    );
+    state = state.copyWith(activePage: page);
+  }
+
+  void _refreshSessionQueue() {
+    final List<MediaItem> queue = _repository.fetchQueue(
+      mode: state.discoveryMode,
+      specificFolder: state.specificFolder,
+      limit: _sessionQueueSize,
+      randomSeed: state.randomSeed,
+    );
+    _repository.prioritizeForEnrichment(
+      queue.map((MediaItem item) => item.id),
+      onProgress: _handleScanProgress,
+      onDataChanged: () {
+        _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
+      },
+    );
+    state = state.copyWith(sessionQueue: queue);
+  }
+
+  void _refreshTrashPage({required int targetCount}) {
+    final GalleryPage page = _repository.fetchTrashPage(
+      offset: 0,
+      limit: targetCount,
+    );
+    _repository.prioritizeForEnrichment(
+      page.items.map((MediaItem item) => item.id),
+      onProgress: _handleScanProgress,
+      onDataChanged: () {
+        _refreshLoadedViews(resetActivePage: false, resetTrashPage: false);
+      },
+    );
+    state = state.copyWith(trashPage: page);
+  }
+
+  void _refreshCollections() {
+    state = state.copyWith(
+      taggedCollections: _repository.taggedCollections(previewLimit: 15),
+    );
+  }
+
+  Future<void> _persistPreferences() {
+    return _repository.persistPreferences(
+      discoveryMode: state.discoveryMode,
+      scanScope: state.scanScope,
+      specificFolder: state.specificFolder,
+      customTags: state.customTags,
+      sessionsCompleted: state.sessionsCompleted,
+      lastSessionProcessed: state.lastSessionProcessed,
+      lastSessionFreedBytes: state.lastSessionFreedBytes,
+    );
   }
 
   DiscoveryMode _modeForScope(ScanScope scope) {
@@ -819,63 +676,6 @@ class SweepController extends StateNotifier<SweepState> {
         return DiscoveryMode.screenshots;
       case ScanScope.downloads:
         return DiscoveryMode.downloads;
-    }
-  }
-
-  List<MediaItem> _updateMediaItem(
-    String mediaId,
-    MediaItem Function(MediaItem previous) transform,
-  ) {
-    return _updateMediaItemFrom(state.media, mediaId, transform);
-  }
-
-  List<MediaItem> _updateMediaItemFrom(
-    List<MediaItem> source,
-    String mediaId,
-    MediaItem Function(MediaItem previous) transform,
-  ) {
-    return source.map((MediaItem item) {
-      if (item.id != mediaId) {
-        return item;
-      }
-      return transform(item);
-    }).toList();
-  }
-
-  Future<void> _persist() async {
-    await _store.saveState(state.toJson());
-  }
-
-  Future<void> _attemptMoveAssets(Set<String> ids, String folderName) async {
-    final List<String> assetIds = state.media
-        .where((MediaItem item) => ids.contains(item.id))
-        .map((MediaItem item) => item.assetId)
-        .whereType<String>()
-        .toList();
-
-    if (assetIds.isEmpty) {
-      return;
-    }
-
-    final List<AssetEntity> entities = <AssetEntity>[];
-    for (final String assetId in assetIds) {
-      final AssetEntity? entity = await AssetEntity.fromId(assetId);
-      if (entity != null) {
-        entities.add(entity);
-      }
-    }
-
-    if (entities.isEmpty) {
-      return;
-    }
-
-    try {
-      await PhotoManager.editor.android.moveAssetsToPath(
-        entities: entities,
-        targetPath: 'Pictures/$folderName',
-      );
-    } catch (_) {
-      // Local organization state remains available if native move is unsupported.
     }
   }
 }

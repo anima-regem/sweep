@@ -1,7 +1,8 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
+import '../../app/theme.dart';
 import '../../models/sweep_models.dart';
 import 'media_preview.dart';
 
@@ -25,6 +26,8 @@ class SwipeDeck extends StatefulWidget {
 
 class _SwipeDeckState extends State<SwipeDeck> {
   Offset _dragOffset = Offset.zero;
+  bool _isDragging = false;
+  bool _isExiting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +35,7 @@ class _SwipeDeckState extends State<SwipeDeck> {
       return const SizedBox.shrink();
     }
 
+    final SweepThemeData theme = SweepTheme.of(context);
     final double dragDistance = _dragOffset.distance;
     final double tiltDegrees = (_dragOffset.dx / 24).clamp(-7.0, 7.0);
     final SwipeDirection? direction = _directionFromOffset(_dragOffset);
@@ -39,22 +43,25 @@ class _SwipeDeckState extends State<SwipeDeck> {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final MediaItem current = widget.current!;
+        final double depth = min(1.0, dragDistance / 120);
 
         return Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
             if (widget.next != null)
               Positioned.fill(
-                child: Transform.scale(
-                  scale: 0.94,
-                  child: Transform.translate(
-                    offset: const Offset(0, 16),
+                child: Transform.translate(
+                  offset: Offset(0, 24 - depth * 12),
+                  child: Transform.scale(
+                    scale: 0.90 + depth * 0.06,
                     child: Opacity(
-                      opacity: 0.72,
+                      opacity: 0.42 + depth * 0.26,
                       child: _CardShell(
                         child: MediaPreview(
                           item: widget.next!,
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(
+                            theme.radii.lg,
+                          ),
                         ),
                       ),
                     ),
@@ -62,23 +69,39 @@ class _SwipeDeckState extends State<SwipeDeck> {
                 ),
               ),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              curve: Curves.easeOut,
+              duration: _isDragging
+                  ? Duration.zero
+                  : theme.motion.component,
+              curve: theme.motion.emphasized,
+              transform: Matrix4.identity()
+                ..translateByDouble(_dragOffset.dx, _dragOffset.dy, 0, 1)
+                ..rotateZ(tiltDegrees * pi / 180),
+              transformAlignment: Alignment.center,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(theme.radii.lg),
                 boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: _glowColor(
-                      direction,
-                    ).withValues(alpha: min(0.48, dragDistance / 220)),
-                    blurRadius: 32,
-                    spreadRadius: 0,
+                  ...theme.elevation.panel(1.1),
+                  ...theme.elevation.glow(
+                    _glowColor(theme, direction),
+                    min(0.95, dragDistance / 180),
                   ),
                 ],
               ),
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: widget.onTap,
+                onPanStart: (_) {
+                  if (_isExiting) {
+                    return;
+                  }
+                  setState(() {
+                    _isDragging = true;
+                  });
+                },
                 onPanUpdate: (DragUpdateDetails details) {
+                  if (_isExiting) {
+                    return;
+                  }
                   setState(() {
                     _dragOffset += details.delta;
                   });
@@ -90,37 +113,51 @@ class _SwipeDeckState extends State<SwipeDeck> {
                   );
 
                   if (swiped != null) {
-                    widget.onSwipe(current, swiped);
+                    final Offset exitOffset = _exitOffsetFor(
+                      swiped,
+                      constraints.biggest,
+                    );
+                    setState(() {
+                      _isDragging = false;
+                      _isExiting = true;
+                      _dragOffset = exitOffset;
+                    });
+                    Future<void>.delayed(theme.motion.component, () {
+                      if (!mounted) {
+                        return;
+                      }
+                      widget.onSwipe(current, swiped);
+                      setState(() {
+                        _dragOffset = Offset.zero;
+                        _isExiting = false;
+                      });
+                    });
+                    return;
                   }
 
                   setState(() {
+                    _isDragging = false;
                     _dragOffset = Offset.zero;
                   });
                 },
-                child: Transform.translate(
-                  offset: _dragOffset,
-                  child: Transform.rotate(
-                    angle: tiltDegrees * pi / 180,
-                    child: _CardShell(
-                      child: Stack(
-                        children: <Widget>[
-                          Positioned.fill(
-                            child: MediaPreview(
-                              item: current,
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: _SwipeOverlay(
-                                direction: direction,
-                                intensity: min(1.0, dragDistance / 120),
-                              ),
-                            ),
-                          ),
-                        ],
+                child: _CardShell(
+                  child: Stack(
+                    children: <Widget>[
+                      Positioned.fill(
+                        child: MediaPreview(
+                          item: current,
+                          borderRadius: BorderRadius.circular(theme.radii.lg),
+                        ),
                       ),
-                    ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: _SwipeOverlay(
+                            direction: direction,
+                            intensity: min(1.0, dragDistance / 110),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -131,12 +168,25 @@ class _SwipeDeckState extends State<SwipeDeck> {
     );
   }
 
+  Offset _exitOffsetFor(SwipeDirection direction, Size size) {
+    switch (direction) {
+      case SwipeDirection.left:
+        return Offset(-size.width * 1.2, 28);
+      case SwipeDirection.right:
+        return Offset(size.width * 1.2, -18);
+      case SwipeDirection.up:
+        return Offset(0, -size.height * 1.1);
+      case SwipeDirection.down:
+        return Offset(0, size.height * 1.0);
+    }
+  }
+
   SwipeDirection? _resolveSwipe({
     required Offset offset,
     required Offset velocity,
   }) {
-    const double distanceThreshold = 108;
-    const double velocityThreshold = 900;
+    const double distanceThreshold = 112;
+    const double velocityThreshold = 940;
 
     if (offset.distance < distanceThreshold &&
         velocity.distance < velocityThreshold) {
@@ -158,7 +208,7 @@ class _SwipeDeckState extends State<SwipeDeck> {
   }
 
   SwipeDirection? _directionFromOffset(Offset offset) {
-    if (offset.distance < 20) {
+    if (offset.distance < 18) {
       return null;
     }
 
@@ -169,18 +219,18 @@ class _SwipeDeckState extends State<SwipeDeck> {
     return offset.dy >= 0 ? SwipeDirection.down : SwipeDirection.up;
   }
 
-  Color _glowColor(SwipeDirection? direction) {
+  Color _glowColor(SweepThemeData theme, SwipeDirection? direction) {
     switch (direction) {
       case SwipeDirection.left:
-        return const Color(0xFFF25F5C);
+        return theme.colors.danger;
       case SwipeDirection.right:
-        return const Color(0xFF45C08A);
+        return theme.colors.success;
       case SwipeDirection.up:
-        return const Color(0xFF4C77E2);
+        return theme.colors.info;
       case SwipeDirection.down:
-        return const Color(0xFFFAB84C);
+        return theme.colors.warning;
       case null:
-        return Colors.transparent;
+        return const Color(0x00000000);
     }
   }
 }
@@ -192,10 +242,14 @@ class _CardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF03070D),
+        borderRadius: BorderRadius.circular(theme.radii.lg),
+        border: Border.all(
+          color: theme.colors.border.withValues(alpha: 0.6),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: AspectRatio(aspectRatio: 0.68, child: child),
@@ -215,63 +269,81 @@ class _SwipeOverlay extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final SweepThemeData theme = SweepTheme.of(context);
     late final Color color;
     late final IconData icon;
     late final String text;
 
     switch (direction!) {
       case SwipeDirection.left:
-        color = const Color(0xFFF25F5C);
-        icon = Icons.delete_outline;
+        color = theme.colors.danger;
+        icon = CupertinoIcons.trash;
         text = 'DELETE';
         break;
       case SwipeDirection.right:
-        color = const Color(0xFF45C08A);
-        icon = Icons.favorite_outline;
+        color = theme.colors.success;
+        icon = CupertinoIcons.heart;
         text = 'KEEP';
         break;
       case SwipeDirection.up:
-        color = const Color(0xFF4C77E2);
-        icon = Icons.sell_outlined;
-        text = 'TAG / ORGANIZE';
+        color = theme.colors.info;
+        icon = CupertinoIcons.tag;
+        text = 'TAG / MOVE';
         break;
       case SwipeDirection.down:
-        color = const Color(0xFFFAB84C);
-        icon = Icons.skip_next_outlined;
+        color = theme.colors.warning;
+        icon = CupertinoIcons.forward;
         text = 'SKIP';
         break;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: color.withValues(alpha: 0.8), width: 3),
-        borderRadius: BorderRadius.circular(24),
-        color: color.withValues(alpha: 0.16 * intensity),
-      ),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.86),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(icon, color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  text,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
+    return AnimatedOpacity(
+      duration: theme.motion.component,
+      opacity: intensity,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(theme.radii.lg),
+          border: Border.all(color: color.withValues(alpha: 0.84), width: 2.4),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: <Color>[
+              color.withValues(alpha: 0.22 * intensity),
+              const Color(0x00000000),
+              color.withValues(alpha: 0.08 * intensity),
+            ],
+          ),
+        ),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Transform.scale(
+              scale: 0.9 + intensity * 0.1,
+              alignment: Alignment.topLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
                 ),
-              ],
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(theme.radii.pill),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(icon, color: theme.colors.textOnAccent, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      text,
+                      style: theme.typography.label.copyWith(
+                        color: theme.colors.textOnAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

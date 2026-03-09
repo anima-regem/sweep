@@ -64,7 +64,7 @@ class MockMediaFactory {
           ),
           folder: folder,
           durationSeconds: isVideo ? 10 + random.nextInt(320) : null,
-          isDuplicate: false,
+          duplicateStatus: DuplicateStatus.unique,
         ),
       );
     }
@@ -113,7 +113,13 @@ class MockMediaFactory {
       final bool isDuplicate = signatureToPrimary.containsKey(signature);
       signatureToPrimary.putIfAbsent(signature, () => item.id);
 
-      output.add(item.copyWith(isDuplicate: isDuplicate));
+      output.add(
+        item.copyWith(
+          duplicateStatus: isDuplicate
+              ? DuplicateStatus.duplicate
+              : DuplicateStatus.unique,
+        ),
+      );
     }
 
     return output;

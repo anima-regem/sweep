@@ -1,8 +1,10 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 enum MediaKind { image, video, livePhoto, burst }
+
+enum DuplicateStatus { unresolved, unique, duplicate }
 
 enum SwipeDecision { keep, delete, tag, skip }
 
@@ -78,25 +80,25 @@ extension DiscoveryModeX on DiscoveryMode {
   IconData get icon {
     switch (this) {
       case DiscoveryMode.all:
-        return Icons.photo_library_outlined;
+        return CupertinoIcons.rectangle_stack;
       case DiscoveryMode.largestFiles:
-        return Icons.sd_storage_outlined;
+        return CupertinoIcons.archivebox;
       case DiscoveryMode.oldestMedia:
-        return Icons.history_toggle_off;
+        return CupertinoIcons.clock;
       case DiscoveryMode.random:
-        return Icons.casino_outlined;
+        return CupertinoIcons.shuffle;
       case DiscoveryMode.duplicates:
-        return Icons.copy_all_outlined;
+        return CupertinoIcons.square_on_square;
       case DiscoveryMode.screenshots:
-        return Icons.screenshot_monitor_outlined;
+        return CupertinoIcons.device_phone_portrait;
       case DiscoveryMode.whatsapp:
-        return Icons.chat_bubble_outline;
+        return CupertinoIcons.chat_bubble_2;
       case DiscoveryMode.cameraRoll:
-        return Icons.camera_alt_outlined;
+        return CupertinoIcons.camera;
       case DiscoveryMode.downloads:
-        return Icons.download_outlined;
+        return CupertinoIcons.arrow_down_circle;
       case DiscoveryMode.specificFolder:
-        return Icons.folder_outlined;
+        return CupertinoIcons.folder;
     }
   }
 }
@@ -118,14 +120,49 @@ extension MediaKindX on MediaKind {
   IconData get icon {
     switch (this) {
       case MediaKind.image:
-        return Icons.image_outlined;
+        return CupertinoIcons.photo;
       case MediaKind.video:
-        return Icons.play_circle_outline;
+        return CupertinoIcons.play_circle;
       case MediaKind.livePhoto:
-        return Icons.motion_photos_on_outlined;
+        return CupertinoIcons.sparkles;
       case MediaKind.burst:
-        return Icons.burst_mode_outlined;
+        return CupertinoIcons.square_grid_2x2;
     }
+  }
+}
+
+class MediaOverlay {
+  const MediaOverlay({this.tags = const <String>[], this.movedToFolder});
+
+  final List<String> tags;
+  final String? movedToFolder;
+
+  bool get isEmpty => tags.isEmpty && movedToFolder == null;
+
+  MediaOverlay copyWith({
+    List<String>? tags,
+    String? movedToFolder,
+    bool clearMovedToFolder = false,
+  }) {
+    return MediaOverlay(
+      tags: tags ?? this.tags,
+      movedToFolder: clearMovedToFolder
+          ? null
+          : (movedToFolder ?? this.movedToFolder),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'tags': tags, 'movedToFolder': movedToFolder};
+  }
+
+  factory MediaOverlay.fromJson(Map<dynamic, dynamic> json) {
+    return MediaOverlay(
+      tags: (json['tags'] as List<dynamic>? ?? const <dynamic>[])
+          .map((dynamic value) => value as String)
+          .toList(),
+      movedToFolder: json['movedToFolder'] as String?,
+    );
   }
 }
 
@@ -133,29 +170,29 @@ class MediaItem {
   const MediaItem({
     required this.id,
     required this.path,
-    required this.sizeBytes,
     required this.width,
     required this.height,
     required this.kind,
     required this.createdAt,
     required this.folder,
-    required this.isDuplicate,
     required this.assetId,
+    this.sizeBytes,
     this.durationSeconds,
+    this.duplicateStatus = DuplicateStatus.unresolved,
     this.tags = const <String>[],
     this.movedToFolder,
   });
 
   final String id;
   final String path;
-  final int sizeBytes;
+  final int? sizeBytes;
   final int width;
   final int height;
   final MediaKind kind;
   final DateTime createdAt;
   final String folder;
   final int? durationSeconds;
-  final bool isDuplicate;
+  final DuplicateStatus duplicateStatus;
   final List<String> tags;
   final String? movedToFolder;
   final String? assetId;
@@ -164,34 +201,52 @@ class MediaItem {
 
   bool get isVideo => kind == MediaKind.video;
 
+  bool get isDuplicate => duplicateStatus == DuplicateStatus.duplicate;
+
+  bool get hasResolvedSize => sizeBytes != null;
+
+  int get safeSizeBytes => sizeBytes ?? 0;
+
+  String get displayName {
+    final int separator = path.lastIndexOf('/');
+    if (separator == -1 || separator == path.length - 1) {
+      return path;
+    }
+    return path.substring(separator + 1);
+  }
+
   MediaItem copyWith({
     String? id,
     String? path,
     int? sizeBytes,
+    bool clearSize = false,
     int? width,
     int? height,
     MediaKind? kind,
     DateTime? createdAt,
     String? folder,
     int? durationSeconds,
-    bool? isDuplicate,
+    DuplicateStatus? duplicateStatus,
     List<String>? tags,
     String? movedToFolder,
+    bool clearMovedToFolder = false,
     String? assetId,
   }) {
     return MediaItem(
       id: id ?? this.id,
       path: path ?? this.path,
-      sizeBytes: sizeBytes ?? this.sizeBytes,
+      sizeBytes: clearSize ? null : (sizeBytes ?? this.sizeBytes),
       width: width ?? this.width,
       height: height ?? this.height,
       kind: kind ?? this.kind,
       createdAt: createdAt ?? this.createdAt,
       folder: folder ?? this.folder,
       durationSeconds: durationSeconds ?? this.durationSeconds,
-      isDuplicate: isDuplicate ?? this.isDuplicate,
+      duplicateStatus: duplicateStatus ?? this.duplicateStatus,
       tags: tags ?? this.tags,
-      movedToFolder: movedToFolder ?? this.movedToFolder,
+      movedToFolder: clearMovedToFolder
+          ? null
+          : (movedToFolder ?? this.movedToFolder),
       assetId: assetId ?? this.assetId,
     );
   }
@@ -207,7 +262,7 @@ class MediaItem {
       'createdAt': createdAt.toIso8601String(),
       'folder': folder,
       'durationSeconds': durationSeconds,
-      'isDuplicate': isDuplicate,
+      'duplicateStatus': duplicateStatus.name,
       'tags': tags,
       'movedToFolder': movedToFolder,
       'assetId': assetId,
@@ -215,17 +270,24 @@ class MediaItem {
   }
 
   factory MediaItem.fromJson(Map<dynamic, dynamic> json) {
+    final String? duplicateStatus = json['duplicateStatus'] as String?;
+    final bool legacyDuplicate = json['isDuplicate'] as bool? ?? false;
+
     return MediaItem(
       id: json['id'] as String,
       path: json['path'] as String,
-      sizeBytes: json['sizeBytes'] as int,
+      sizeBytes: json['sizeBytes'] as int?,
       width: json['width'] as int,
       height: json['height'] as int,
       kind: MediaKind.values.byName(json['kind'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       folder: json['folder'] as String,
       durationSeconds: json['durationSeconds'] as int?,
-      isDuplicate: json['isDuplicate'] as bool? ?? false,
+      duplicateStatus: duplicateStatus == null
+          ? (legacyDuplicate
+                ? DuplicateStatus.duplicate
+                : DuplicateStatus.unique)
+          : DuplicateStatus.values.byName(duplicateStatus),
       tags: (json['tags'] as List<dynamic>? ?? const <dynamic>[])
           .map((dynamic value) => value as String)
           .toList(),
@@ -235,27 +297,108 @@ class MediaItem {
   }
 }
 
+class GalleryPage {
+  const GalleryPage({
+    this.items = const <MediaItem>[],
+    this.offset = 0,
+    this.hasMore = false,
+    this.totalCount = 0,
+  });
+
+  final List<MediaItem> items;
+  final int offset;
+  final bool hasMore;
+  final int totalCount;
+
+  GalleryPage copyWith({
+    List<MediaItem>? items,
+    int? offset,
+    bool? hasMore,
+    int? totalCount,
+  }) {
+    return GalleryPage(
+      items: items ?? this.items,
+      offset: offset ?? this.offset,
+      hasMore: hasMore ?? this.hasMore,
+      totalCount: totalCount ?? this.totalCount,
+    );
+  }
+}
+
+class ScanProgress {
+  const ScanProgress({
+    required this.isRunning,
+    required this.indexedCount,
+    required this.enrichedCount,
+    required this.label,
+    this.totalAlbums,
+  });
+
+  const ScanProgress.idle()
+    : isRunning = false,
+      indexedCount = 0,
+      enrichedCount = 0,
+      label = 'Gallery ready',
+      totalAlbums = null;
+
+  final bool isRunning;
+  final int indexedCount;
+  final int enrichedCount;
+  final String label;
+  final int? totalAlbums;
+
+  ScanProgress copyWith({
+    bool? isRunning,
+    int? indexedCount,
+    int? enrichedCount,
+    String? label,
+    int? totalAlbums,
+  }) {
+    return ScanProgress(
+      isRunning: isRunning ?? this.isRunning,
+      indexedCount: indexedCount ?? this.indexedCount,
+      enrichedCount: enrichedCount ?? this.enrichedCount,
+      label: label ?? this.label,
+      totalAlbums: totalAlbums ?? this.totalAlbums,
+    );
+  }
+}
+
 class FolderUsage {
   const FolderUsage({
     required this.folder,
     required this.itemCount,
     required this.totalSizeBytes,
+    this.unresolvedSizeCount = 0,
   });
 
   final String folder;
   final int itemCount;
   final int totalSizeBytes;
+  final int unresolvedSizeCount;
 }
 
-class StorageInsights {
-  const StorageInsights({
+class GallerySummary {
+  const GallerySummary({
     required this.totalMediaCount,
     required this.totalSizeBytes,
     required this.duplicateCount,
     required this.potentialFreedBytes,
     required this.largestVideos,
     required this.folderUsage,
+    required this.unresolvedSizeCount,
+    required this.isPartial,
   });
+
+  const GallerySummary.empty()
+    : totalMediaCount = 0,
+      totalSizeBytes = 0,
+      duplicateCount = 0,
+      potentialFreedBytes = 0,
+      largestVideos = const <MediaItem>[],
+      folderUsage = const <FolderUsage>[],
+      unresolvedSizeCount = 0,
+      isPartial = true;
 
   final int totalMediaCount;
   final int totalSizeBytes;
@@ -263,6 +406,8 @@ class StorageInsights {
   final int potentialFreedBytes;
   final List<MediaItem> largestVideos;
   final List<FolderUsage> folderUsage;
+  final int unresolvedSizeCount;
+  final bool isPartial;
 }
 
 class CleanupSuggestion {

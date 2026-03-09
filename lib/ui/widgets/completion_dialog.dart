@@ -1,8 +1,10 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
+import '../../app/theme.dart';
 import '../../utils/formatters.dart';
+import '../components/sweep_primitives.dart';
 
 class CompletionDialog extends StatelessWidget {
   const CompletionDialog({
@@ -16,41 +18,34 @@ class CompletionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const SizedBox(height: 120, child: _ConfettiBurst()),
-            const SizedBox(height: 8),
-            const Text(
-              'Session Complete',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'You cleaned ${formatBytes(freedBytes)} today.',
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$processed items processed in this swipe run.',
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Continue'),
-              ),
-            ),
-          ],
-        ),
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepDialogFrame(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(height: 132, child: _ConfettiBurst()),
+          const SizedBox(height: 4),
+          Text('Session complete', style: theme.typography.display),
+          const SizedBox(height: 10),
+          Text(
+            'You cleaned ${formatBytes(freedBytes)} in this run.',
+            style: theme.typography.bodyStrong,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$processed items processed before the queue ran dry.',
+            style: theme.typography.detail,
+          ),
+          const SizedBox(height: 18),
+          SweepButton(
+            label: 'Keep going',
+            icon: CupertinoIcons.arrow_right,
+            expand: true,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }
@@ -73,24 +68,33 @@ class _ConfettiBurstState extends State<_ConfettiBurst>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1280),
     )..forward();
 
     final Random random = Random(11);
-    _particles = List<_Particle>.generate(28, (int index) {
+    _particles = List<_Particle>.generate(30, (int index) {
       return _Particle(
         x: random.nextDouble(),
-        y: random.nextDouble() * 0.3,
+        y: random.nextDouble() * 0.32,
         vx: random.nextDouble() * 2 - 1,
-        vy: random.nextDouble() * 1.8 + 0.6,
-        size: random.nextDouble() * 8 + 5,
+        vy: random.nextDouble() * 1.8 + 0.7,
+        size: random.nextDouble() * 7 + 5,
         color: Color.lerp(
-          const Color(0xFF1F8A8A),
-          const Color(0xFFA5C957),
+          const Color(0xFF7CF6D4),
+          const Color(0xFF6F7DF6),
           random.nextDouble(),
         )!,
       );
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (SweepTheme.of(context).motion.reduceMotion) {
+      _controller.value = 1;
+      _controller.stop();
+    }
   }
 
   @override
@@ -128,13 +132,13 @@ class _ConfettiPainter extends CustomPainter {
 
     for (final _Particle particle in particles) {
       final Offset center = Offset(
-        size.width * particle.x + particle.vx * 70 * progress,
-        size.height * particle.y + particle.vy * 90 * progress,
+        size.width * particle.x + particle.vx * 78 * progress,
+        size.height * particle.y + particle.vy * 92 * progress,
       );
       paint.color = particle.color.withValues(
         alpha: (1 - progress).clamp(0.0, 1.0),
       );
-      canvas.drawCircle(center, particle.size * (1 - progress * 0.3), paint);
+      canvas.drawCircle(center, particle.size * (1 - progress * 0.28), paint);
     }
   }
 

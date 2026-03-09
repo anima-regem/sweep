@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../models/sweep_models.dart';
 import '../../state/sweep_controller.dart';
 import '../../utils/formatters.dart';
+import '../components/sweep_primitives.dart';
 
 class TagsTab extends ConsumerStatefulWidget {
   const TagsTab({super.key});
@@ -14,6 +16,7 @@ class TagsTab extends ConsumerStatefulWidget {
 
 class _TagsTabState extends ConsumerState<TagsTab> {
   final TextEditingController _tagController = TextEditingController();
+  final Set<String> _expanded = <String>{};
 
   @override
   void dispose() {
@@ -23,63 +26,68 @@ class _TagsTabState extends ConsumerState<TagsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
     final SweepController controller = ref.read(
       sweepControllerProvider.notifier,
     );
     final SweepState state = ref.watch(sweepControllerProvider);
-    final Map<String, List<MediaItem>> collections = controller
-        .taggedCollections();
+    final Map<String, List<MediaItem>> collections = state.taggedCollections;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+    return SweepPage(
+      eyebrow: 'Collections',
+      title: 'Tag and retrieve',
+      subtitle:
+          'Create lightweight labels, keep people or themes grouped, and browse collections without leaving Sweep.',
       children: <Widget>[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+        SweepReveal(
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'Tagging System',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                const SweepSectionHeader(
+                  title: 'Create a tag',
+                  subtitle: 'Simple labels are enough to make the archive feel organized.',
                 ),
-                const SizedBox(height: 8),
-                const Text('Create and organize media with lightweight tags.'),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Row(
                   children: <Widget>[
                     Expanded(
-                      child: TextField(
+                      child: SweepTextField(
+                        label: 'Label',
+                        placeholder: 'Friends / Work / Travel',
                         controller: _tagController,
-                        decoration: const InputDecoration(
-                          hintText: 'Friends / Work / Travel',
-                          border: OutlineInputBorder(),
-                        ),
+                        prefix: const Icon(CupertinoIcons.tag),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () {
-                        final String tag = _tagController.text.trim();
-                        if (tag.isEmpty) {
-                          return;
-                        }
-                        controller.addCustomTag(tag);
-                        _tagController.clear();
-                      },
-                      child: const Text('Create'),
+                    const SizedBox(width: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: SweepButton(
+                        label: 'Create',
+                        onPressed: () {
+                          final String tag = _tagController.text.trim();
+                          if (tag.isEmpty) {
+                            return;
+                          }
+                          controller.addCustomTag(tag);
+                          _tagController.clear();
+                        },
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: 10,
+                  runSpacing: 10,
                   children: state.customTags
                       .map(
-                        (String tag) => Chip(
-                          avatar: const Icon(Icons.sell_outlined, size: 16),
-                          label: Text(tag),
+                        (String tag) => SweepPill(
+                          text: tag,
+                          icon: CupertinoIcons.tag_fill,
+                          color: theme.colors.primary,
+                          filled: true,
                         ),
                       )
                       .toList(),
@@ -88,66 +96,145 @@ class _TagsTabState extends ConsumerState<TagsTab> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 60),
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Face Tagging (Phase 2)',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+              children: const <Widget>[
+                SweepSectionHeader(
+                  title: 'People labels',
+                  subtitle:
+                      'Auto face clustering stays out of v1, but manual labels keep the same retrieval flow alive.',
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Manual people labels are supported via tags now. '
-                  'Auto face clustering is planned for a future release.',
-                ),
-                const SizedBox(height: 10),
+                SizedBox(height: 16),
                 Wrap(
-                  spacing: 8,
-                  children: const <Widget>[
-                    Chip(label: Text('Arjun')),
-                    Chip(label: Text('Maya')),
-                    Chip(label: Text('Dad')),
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: <Widget>[
+                    SweepPill(
+                      text: 'Arjun',
+                      icon: CupertinoIcons.person_crop_circle_fill,
+                      filled: true,
+                    ),
+                    SweepPill(
+                      text: 'Maya',
+                      icon: CupertinoIcons.person_crop_circle_fill,
+                      filled: true,
+                    ),
+                    SweepPill(
+                      text: 'Dad',
+                      icon: CupertinoIcons.person_crop_circle_fill,
+                      filled: true,
+                    ),
                   ],
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         if (collections.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 18),
-            child: Center(
-              child: Text('No tagged media yet. Swipe up to tag items.'),
+          const SweepReveal(
+            delay: Duration(milliseconds: 120),
+            child: SweepEmptyState(
+              icon: CupertinoIcons.tag,
+              title: 'No tagged media yet',
+              body: 'Swipe up in Session or use bulk actions in Explore to start labeling media.',
             ),
           )
         else
-          ...collections.entries.map(
-            (MapEntry<String, List<MediaItem>> entry) => Card(
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-                title: Text(
-                  entry.key,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text('${entry.value.length} media items'),
-                children: entry.value.take(15).map((MediaItem item) {
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(item.kind.icon),
-                    title: Text(
-                      '${item.resolvedFolder} • ${formatBytes(item.sizeBytes)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          SweepReveal(
+            delay: const Duration(milliseconds: 120),
+            child: Column(
+              children: collections.entries.map((
+                MapEntry<String, List<MediaItem>> entry,
+              ) {
+                final bool expanded = _expanded.contains(entry.key);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (expanded) {
+                          _expanded.remove(entry.key);
+                        } else {
+                          _expanded.add(entry.key);
+                        }
+                      });
+                    },
+                    child: SweepSurface(
+                      tone: SweepSurfaceTone.raised,
+                      child: AnimatedSize(
+                        duration: theme.motion.component,
+                        curve: theme.motion.standard,
+                        child: Column(
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      theme.radii.md,
+                                    ),
+                                    gradient: theme.heroGradient,
+                                  ),
+                                  child: Icon(
+                                    CupertinoIcons.tag_fill,
+                                    color: theme.colors.textOnAccent,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        entry.key,
+                                        style: theme.typography.bodyStrong,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${entry.value.length} media items',
+                                        style: theme.typography.detail,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  expanded
+                                      ? CupertinoIcons.chevron_up
+                                      : CupertinoIcons.chevron_down,
+                                  size: 18,
+                                  color: theme.colors.textSecondary,
+                                ),
+                              ],
+                            ),
+                            if (expanded) ...<Widget>[
+                              const SizedBox(height: 14),
+                              ...entry.value.take(15).map(
+                                (MediaItem item) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: SweepListRow(
+                                    title:
+                                        '${item.resolvedFolder} • ${formatMaybeBytes(item.sizeBytes)}',
+                                    subtitle: formatDate(item.createdAt),
+                                    leading: Icon(item.kind.icon),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                    subtitle: Text(formatDate(item.createdAt)),
-                  );
-                }).toList(),
-              ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
       ],

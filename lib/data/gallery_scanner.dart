@@ -1,26 +1,43 @@
-import 'dart:io';
-
 import 'package:photo_manager/photo_manager.dart';
 
 import '../models/sweep_models.dart';
 import 'mock_media_factory.dart';
 
+class GalleryScanBatch {
+  const GalleryScanBatch({
+    required this.items,
+    required this.indexedCount,
+    required this.albumCount,
+    required this.label,
+    this.complete = false,
+  });
+
+  final List<MediaItem> items;
+  final int indexedCount;
+  final int albumCount;
+  final String label;
+  final bool complete;
+}
+
 class GalleryScanner {
   const GalleryScanner();
 
-  Future<List<MediaItem>> scan({
+  Stream<GalleryScanBatch> scanBatches({
     required ScanScope scope,
     String? specificFolder,
-  }) async {
+    int batchSize = 120,
+  }) async* {
     try {
       final PermissionState permission =
           await PhotoManager.requestPermissionExtend();
 
       if (!_hasMediaAccess(permission)) {
-        return MockMediaFactory.generate(
+        yield* _mockBatches(
           scope: scope,
           specificFolder: specificFolder,
+          batchSize: batchSize,
         );
+        return;
       }
 
       final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
@@ -28,80 +45,120 @@ class GalleryScanner {
         hasAll: true,
       );
 
-      final Iterable<AssetPathEntity> filteredAlbums = albums.where(
-        (AssetPathEntity album) => _matchesScope(
+      final List<AssetPathEntity> filteredAlbums = albums.where((
+        AssetPathEntity album,
+      ) {
+        return _matchesScope(
           album.name,
           scope: scope,
           specificFolder: specificFolder,
-        ),
-      );
-
-      final List<MediaItem> scanned = <MediaItem>[];
-      for (final AssetPathEntity album in filteredAlbums) {
-        scanned.addAll(await _readAlbum(album));
-      }
-
-      if (scanned.isEmpty) {
-        return MockMediaFactory.generate(
-          scope: scope,
-          specificFolder: specificFolder,
-          count: 220,
         );
+      }).toList();
+
+      int indexedCount = 0;
+
+      for (final AssetPathEntity album in filteredAlbums) {
+        int page = 0;
+
+        while (true) {
+          final List<AssetEntity> pageItems = await album.getAssetListPaged(
+            page: page,
+            size: batchSize,
+          );
+
+          if (pageItems.isEmpty) {
+            break;
+          }
+
+          final List<MediaItem> items = pageItems
+              .where((AssetEntity asset) {
+                return asset.type != AssetType.audio &&
+                    asset.type != AssetType.other;
+              })
+              .map((AssetEntity asset) => _assetToMedia(asset, album.name))
+              .toList();
+
+          indexedCount += items.length;
+
+          if (items.isNotEmpty) {
+            yield GalleryScanBatch(
+              items: items,
+              indexedCount: indexedCount,
+              albumCount: filteredAlbums.length,
+              label: 'Indexing ${album.name}',
+            );
+          }
+
+          page++;
+        }
       }
 
-      return _markDuplicates(scanned);
+      yield GalleryScanBatch(
+        items: const <MediaItem>[],
+        indexedCount: indexedCount,
+        albumCount: filteredAlbums.length,
+        label: 'Index ready',
+        complete: true,
+      );
     } catch (_) {
-      return MockMediaFactory.generate(
+      yield* _mockBatches(
         scope: scope,
         specificFolder: specificFolder,
-        count: 260,
+        batchSize: batchSize,
       );
     }
   }
 
-  Future<List<MediaItem>> _readAlbum(AssetPathEntity album) async {
-    const int pageSize = 150;
-    int page = 0;
+  MediaItem _assetToMedia(AssetEntity asset, String albumName) {
+    final MediaKind kind = _mapAssetKind(asset);
+    return MediaItem(
+      id: asset.id,
+      assetId: asset.id,
+      path: asset.title ?? asset.id,
+      sizeBytes: null,
+      width: asset.width,
+      height: asset.height,
+      kind: kind,
+      createdAt: asset.createDateTime,
+      folder: albumName,
+      durationSeconds: kind == MediaKind.video ? asset.duration : null,
+      duplicateStatus: DuplicateStatus.unresolved,
+    );
+  }
 
-    final List<MediaItem> items = <MediaItem>[];
-    while (true) {
-      final List<AssetEntity> pageItems = await album.getAssetListPaged(
-        page: page,
-        size: pageSize,
+  Stream<GalleryScanBatch> _mockBatches({
+    required ScanScope scope,
+    required String? specificFolder,
+    required int batchSize,
+  }) async* {
+    final List<MediaItem> generated = MockMediaFactory.generate(
+      scope: scope,
+      specificFolder: specificFolder,
+      count: 260,
+    );
+
+    int indexedCount = 0;
+    for (int start = 0; start < generated.length; start += batchSize) {
+      final int end = start + batchSize > generated.length
+          ? generated.length
+          : start + batchSize;
+      final List<MediaItem> batch = generated.sublist(start, end);
+      indexedCount += batch.length;
+      yield GalleryScanBatch(
+        items: batch,
+        indexedCount: indexedCount,
+        albumCount: 1,
+        label: 'Indexing demo gallery',
       );
-      if (pageItems.isEmpty) {
-        break;
-      }
-
-      for (final AssetEntity asset in pageItems) {
-        if (asset.type == AssetType.audio || asset.type == AssetType.other) {
-          continue;
-        }
-
-        final int size = await _sizeForAsset(asset);
-        final MediaKind kind = _mapAssetKind(asset);
-
-        items.add(
-          MediaItem(
-            id: asset.id,
-            assetId: asset.id,
-            path: asset.title ?? asset.id,
-            sizeBytes: size,
-            width: asset.width,
-            height: asset.height,
-            kind: kind,
-            createdAt: asset.createDateTime,
-            folder: album.name,
-            durationSeconds: kind == MediaKind.video ? asset.duration : null,
-            isDuplicate: false,
-          ),
-        );
-      }
-
-      page++;
     }
 
-    return items;
+    yield GalleryScanBatch(
+      items: const <MediaItem>[],
+      indexedCount: indexedCount,
+      albumCount: 1,
+      label: 'Demo index ready',
+      complete: true,
+    );
   }
 
   bool _hasMediaAccess(PermissionState permission) {
@@ -144,32 +201,5 @@ class GalleryScanner {
     }
 
     return MediaKind.image;
-  }
-
-  Future<int> _sizeForAsset(AssetEntity asset) async {
-    try {
-      final File? file = await asset.file;
-      if (file == null) {
-        return 0;
-      }
-      return await file.length();
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  List<MediaItem> _markDuplicates(List<MediaItem> items) {
-    final Map<String, String> seenBySignature = <String, String>{};
-    final List<MediaItem> output = <MediaItem>[];
-
-    for (final MediaItem item in items) {
-      final String signature =
-          '${item.sizeBytes}_${item.width}_${item.height}_${item.kind.name}';
-      final bool isDuplicate = seenBySignature.containsKey(signature);
-      seenBySignature.putIfAbsent(signature, () => item.id);
-      output.add(item.copyWith(isDuplicate: isDuplicate));
-    }
-
-    return output;
   }
 }

@@ -17,6 +17,13 @@ String formatBytes(int bytes) {
   return '${format.format(value)} ${units[unitIndex]}';
 }
 
+String formatMaybeBytes(int? bytes, {String fallback = 'Size pending'}) {
+  if (bytes == null) {
+    return fallback;
+  }
+  return formatBytes(bytes);
+}
+
 String formatDate(DateTime dateTime) {
   return DateFormat('dd MMM yyyy').format(dateTime);
 }

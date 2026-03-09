@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../models/sweep_models.dart';
 import '../../state/sweep_controller.dart';
 import '../../utils/formatters.dart';
+import '../components/sweep_primitives.dart';
 import '../widgets/completion_dialog.dart';
 import '../widgets/swipe_deck.dart';
 
@@ -30,7 +32,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
     if (state.showCompletion && !_dialogVisible) {
       _dialogVisible = true;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await showDialog<void>(
+        await showSweepDialog<void>(
           context: context,
           builder: (BuildContext context) => CompletionDialog(
             processed: state.lastSessionProcessed,
@@ -47,165 +49,126 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
       });
     }
 
-    final List<MediaItem> queue = controller.swipeQueue();
+    final List<MediaItem> queue = state.sessionQueue;
     final MediaItem? current = queue.isNotEmpty ? queue.first : null;
     final MediaItem? next = queue.length > 1 ? queue[1] : null;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
-      children: <Widget>[
-        _buildModeSelector(state: state, controller: controller),
-        const SizedBox(height: 8),
-        _buildSessionSummary(queueCount: queue.length, state: state),
-        const SizedBox(height: 12),
-        if (current == null)
-          _EmptyQueueCard(onOpenTrash: widget.onOpenTrash)
-        else
-          Column(
-            children: <Widget>[
-              SwipeDeck(
-                current: current,
-                next: next,
-                onTap: () => _openCardActions(current),
-                onSwipe: (MediaItem item, SwipeDirection direction) {
-                  _handleSwipe(item, direction);
-                },
-              ),
-              const SizedBox(height: 14),
-              _InfoBanner(item: current),
-              const SizedBox(height: 12),
-              _ActionButtons(
-                onSkip: () => _handleSwipe(current, SwipeDirection.down),
-                onDelete: () => _handleSwipe(current, SwipeDirection.left),
-                onTag: () => _handleSwipe(current, SwipeDirection.up),
-                onKeep: () => _handleSwipe(current, SwipeDirection.right),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _buildModeSelector({
-    required SweepState state,
-    required SweepController controller,
-  }) {
-    final List<String> folders = controller.folders();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text(
-              'Smart Discovery Mode',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<DiscoveryMode>(
-              initialValue: state.discoveryMode,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: DiscoveryMode.values
-                  .map(
-                    (DiscoveryMode mode) => DropdownMenuItem<DiscoveryMode>(
-                      value: mode,
-                      child: Text(mode.label),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (DiscoveryMode? mode) {
-                if (mode == null) {
-                  return;
-                }
-
-                if (mode == DiscoveryMode.specificFolder &&
-                    state.specificFolder == null &&
-                    folders.isNotEmpty) {
-                  controller.setDiscoveryMode(mode, folderName: folders.first);
-                  return;
-                }
-
-                controller.setDiscoveryMode(mode);
-              },
-            ),
-            if (state.discoveryMode ==
-                DiscoveryMode.specificFolder) ...<Widget>[
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue:
-                    state.specificFolder ??
-                    (folders.isEmpty ? null : folders.first),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Folder',
-                  isDense: true,
-                ),
-                items: folders
-                    .map(
-                      (String folder) => DropdownMenuItem<String>(
-                        value: folder,
-                        child: Text(folder),
-                      ),
-                    )
-                    .toList(),
-                onChanged: folders.isEmpty
-                    ? null
-                    : (String? value) {
-                        if (value == null) {
-                          return;
-                        }
-                        controller.setDiscoveryMode(
-                          DiscoveryMode.specificFolder,
-                          folderName: value,
-                        );
-                      },
-              ),
-            ],
-          ],
-        ),
+    return SweepPage(
+      eyebrow: 'Session',
+      title: 'Live swipe lane',
+      subtitle:
+          'Move fast through the active discovery mode with gesture-driven actions and a review queue.',
+      trailing: SweepPill(
+        text: '${queue.length} pending',
+        icon: CupertinoIcons.waveform_path,
+        filled: true,
       ),
-    );
-  }
-
-  Widget _buildSessionSummary({
-    required int queueCount,
-    required SweepState state,
-  }) {
-    final int trashCount = state.decisions.values
-        .where((SwipeDecision decision) => decision == SwipeDecision.delete)
-        .length;
-
-    return Row(
       children: <Widget>[
-        Expanded(
-          child: _StatPill(
-            title: 'Pending',
-            value: '$queueCount',
-            color: const Color(0xFF3567D6),
+        if (current == null)
+          SweepReveal(
+            child: SweepEmptyState(
+              icon: CupertinoIcons.sparkles,
+              title: 'No cards left in this mode',
+              body:
+                  'Switch discovery modes, rescan the gallery, or open the review queue.',
+              action: SweepButton(
+                label: 'Open review queue',
+                icon: CupertinoIcons.trash,
+                expand: true,
+                onPressed: widget.onOpenTrash,
+              ),
+            ),
+          )
+        else
+          SweepReveal(
+            child: Column(
+              children: <Widget>[
+                SwipeDeck(
+                  current: current,
+                  next: next,
+                  onTap: () => _openCardActions(current),
+                  onSwipe: (MediaItem item, SwipeDirection direction) {
+                    _handleSwipe(item, direction);
+                  },
+                ),
+                const SizedBox(height: 16),
+                _InfoBanner(item: current),
+                const SizedBox(height: 12),
+                _ActionButtons(
+                  onSkip: () => _handleSwipe(current, SwipeDirection.down),
+                  onDelete: () => _handleSwipe(current, SwipeDirection.left),
+                  onTag: () => _handleSwipe(current, SwipeDirection.up),
+                  onKeep: () => _handleSwipe(current, SwipeDirection.right),
+                ),
+              ],
+            ),
           ),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 60),
+          child: _SessionSummary(state: state, queueCount: queue.length),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatPill(
-            title: 'Trash Queue',
-            value: '$trashCount',
-            color: const Color(0xFFF25F5C),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatPill(
-            title: 'Sessions',
-            value: '${state.sessionsCompleted}',
-            color: const Color(0xFF1F8A8A),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 120),
+          child: _ModePanel(
+            state: state,
+            controller: controller,
+            onPickFolder: () => _pickFolder(context, controller, state),
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _pickFolder(
+    BuildContext context,
+    SweepController controller,
+    SweepState state,
+  ) async {
+    final List<String> folders = controller.folders();
+    if (folders.isEmpty) {
+      return;
+    }
+
+    final String? folder = await showSweepSheet<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return SweepSheetFrame(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SweepSectionHeader(
+                title: 'Specific folder',
+                subtitle: 'Choose which folder feeds the current swipe lane.',
+              ),
+              const SizedBox(height: 16),
+              ...folders.map(
+                (String folder) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: SweepListRow(
+                    title: folder,
+                    subtitle: folder == state.specificFolder
+                        ? 'Current folder'
+                        : null,
+                    leading: const Icon(CupertinoIcons.folder),
+                    onTap: () => Navigator.of(context).pop(folder),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (folder != null) {
+      controller.setDiscoveryMode(
+        DiscoveryMode.specificFolder,
+        folderName: folder,
+      );
+    }
   }
 
   Future<void> _handleSwipe(MediaItem item, SwipeDirection direction) async {
@@ -243,60 +206,60 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
   }
 
   Future<void> _openCardActions(MediaItem item) async {
-    await showModalBottomSheet<void>(
+    await showSweepSheet<void>(
       context: context,
-      showDragHandle: true,
       builder: (BuildContext context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  item.path,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 10),
-                Text('Date: ${formatDate(item.createdAt)}'),
-                Text('Size: ${formatBytes(item.sizeBytes)}'),
-                Text('Folder: ${item.resolvedFolder}'),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    FilledButton.icon(
+        return SweepSheetFrame(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SweepSectionHeader(
+                title: item.path.split('/').last,
+                subtitle:
+                    '${formatDate(item.createdAt)} • ${formatMaybeBytes(item.sizeBytes)} • ${item.resolvedFolder}',
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Tag / move',
+                      icon: CupertinoIcons.tag,
+                      variant: SweepButtonVariant.secondary,
                       onPressed: () async {
                         Navigator.of(context).pop();
                         await _handleSwipe(item, SwipeDirection.up);
                       },
-                      icon: const Icon(Icons.sell_outlined),
-                      label: const Text('Tag / Move'),
                     ),
-                    OutlinedButton.icon(
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Delete',
+                      icon: CupertinoIcons.trash,
+                      variant: SweepButtonVariant.danger,
                       onPressed: () {
                         Navigator.of(context).pop();
                         _handleSwipe(item, SwipeDirection.left);
                       },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Delete'),
                     ),
-                    OutlinedButton.icon(
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Keep',
+                      icon: CupertinoIcons.heart,
+                      variant: SweepButtonVariant.secondary,
                       onPressed: () {
                         Navigator.of(context).pop();
                         _handleSwipe(item, SwipeDirection.right);
                       },
-                      icon: const Icon(Icons.favorite_outline),
-                      label: const Text('Keep'),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },
@@ -310,13 +273,11 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
     final SweepState state = ref.read(sweepControllerProvider);
 
     final Set<String> selectedTags = Set<String>.from(item.tags);
-    String? selectedFolder;
+    String? selectedFolder = item.resolvedFolder;
     final TextEditingController tagController = TextEditingController();
 
-    return showModalBottomSheet<_TagMoveAction>(
+    final _TagMoveAction? result = await showSweepSheet<_TagMoveAction>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder:
@@ -324,61 +285,58 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
                 BuildContext context,
                 void Function(void Function()) setModalState,
               ) {
-                return SafeArea(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      8,
-                      16,
-                      16 + MediaQuery.of(context).viewInsets.bottom,
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          const Text(
-                            'Tag & Organize',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: state.customTags
-                                .map(
-                                  (String tag) => FilterChip(
-                                    label: Text(tag),
-                                    selected: selectedTags.contains(tag),
-                                    onSelected: (bool selected) {
-                                      setModalState(() {
-                                        if (selected) {
-                                          selectedTags.add(tag);
-                                        } else {
-                                          selectedTags.remove(tag);
-                                        }
-                                      });
-                                    },
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: <Widget>[
-                              Expanded(
-                                child: TextField(
-                                  controller: tagController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Create tag',
-                                    border: OutlineInputBorder(),
-                                  ),
+                return SweepSheetFrame(
+                  maxWidth: 760,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const SweepSectionHeader(
+                          title: 'Tag and organize',
+                          subtitle:
+                              'Attach labels, choose a target folder, and continue the session.',
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: state.customTags
+                              .map(
+                                (String tag) => SweepPill(
+                                  text: tag,
+                                  icon: CupertinoIcons.tag_fill,
+                                  color: SweepTheme.of(context).colors.info,
+                                  selected: selectedTags.contains(tag),
+                                  onTap: () {
+                                    setModalState(() {
+                                      if (selectedTags.contains(tag)) {
+                                        selectedTags.remove(tag);
+                                      } else {
+                                        selectedTags.add(tag);
+                                      }
+                                    });
+                                  },
                                 ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: SweepTextField(
+                                label: 'Create tag',
+                                placeholder: 'Archive / Receipts / Family',
+                                controller: tagController,
+                                prefix: const Icon(CupertinoIcons.tag),
                               ),
-                              const SizedBox(width: 8),
-                              FilledButton(
+                            ),
+                            const SizedBox(width: 10),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 24),
+                              child: SweepButton(
+                                label: 'Add',
+                                variant: SweepButtonVariant.secondary,
                                 onPressed: () {
                                   final String tag = tagController.text.trim();
                                   if (tag.isEmpty) {
@@ -390,55 +348,165 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
                                     tagController.clear();
                                   });
                                 },
-                                child: const Text('Add'),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<String>(
-                            initialValue: item.resolvedFolder,
-                            decoration: const InputDecoration(
-                              labelText: 'Move to folder (optional)',
-                              border: OutlineInputBorder(),
                             ),
-                            items: controller
-                                .folders()
-                                .map(
-                                  (String folder) => DropdownMenuItem<String>(
-                                    value: folder,
-                                    child: Text(folder),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (String? value) {
-                              setModalState(() {
-                                selectedFolder = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: () {
-                                Navigator.of(context).pop(
-                                  _TagMoveAction(
-                                    tags: selectedTags.toList(),
-                                    folder: selectedFolder,
-                                  ),
-                                );
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Move to folder',
+                          style: SweepTheme.of(context).typography.caption,
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: controller.folders().map((String folder) {
+                            return SweepPill(
+                              text: folder,
+                              icon: CupertinoIcons.folder_fill,
+                              color: SweepTheme.of(context).colors.warning,
+                              selected: selectedFolder == folder,
+                              onTap: () {
+                                setModalState(() {
+                                  selectedFolder = folder;
+                                });
                               },
-                              child: const Text('Apply Tag / Move'),
-                            ),
-                          ),
-                        ],
-                      ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 18),
+                        SweepButton(
+                          label: 'Apply tag / move',
+                          icon: CupertinoIcons.check_mark_circled_solid,
+                          expand: true,
+                          onPressed: () {
+                            Navigator.of(context).pop(
+                              _TagMoveAction(
+                                tags: selectedTags.toList(),
+                                folder: selectedFolder,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );
               },
         );
       },
+    );
+
+    tagController.dispose();
+    return result;
+  }
+}
+
+class _ModePanel extends StatelessWidget {
+  const _ModePanel({
+    required this.state,
+    required this.controller,
+    required this.onPickFolder,
+  });
+
+  final SweepState state;
+  final SweepController controller;
+  final VoidCallback onPickFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    return SweepSurface(
+      tone: SweepSurfaceTone.raised,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SweepSectionHeader(
+            title: 'Discovery lane',
+            subtitle: 'Change the active session mode without leaving the swipe flow.',
+          ),
+          const SizedBox(height: 16),
+          SweepSelector<DiscoveryMode>(
+            options: DiscoveryMode.values
+                .map(
+                  (DiscoveryMode mode) => SweepChoice<DiscoveryMode>(
+                    value: mode,
+                    label: mode.label,
+                    icon: mode.icon,
+                  ),
+                )
+                .toList(),
+            selected: state.discoveryMode,
+            onSelected: (DiscoveryMode mode) {
+              if (mode == DiscoveryMode.specificFolder &&
+                  state.specificFolder == null &&
+                  controller.folders().isNotEmpty) {
+                controller.setDiscoveryMode(
+                  mode,
+                  folderName: controller.folders().first,
+                );
+                return;
+              }
+              controller.setDiscoveryMode(mode);
+            },
+          ),
+          if (state.discoveryMode == DiscoveryMode.specificFolder) ...<Widget>[
+            const SizedBox(height: 16),
+            SweepSelectField(
+              label: 'Folder',
+              value: state.specificFolder,
+              placeholder: 'Choose a folder',
+              icon: CupertinoIcons.folder,
+              onTap: onPickFolder,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionSummary extends StatelessWidget {
+  const _SessionSummary({required this.state, required this.queueCount});
+
+  final SweepState state;
+  final int queueCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final int trashCount = state.decisions.values
+        .where((SwipeDecision decision) => decision == SwipeDecision.delete)
+        .length;
+
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: _StatCard(
+            title: 'Pending',
+            value: '$queueCount',
+            icon: CupertinoIcons.rectangle_stack_fill,
+            color: SweepTheme.of(context).colors.info,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatCard(
+            title: 'Trash queue',
+            value: '$trashCount',
+            icon: CupertinoIcons.trash_fill,
+            color: SweepTheme.of(context).colors.danger,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatCard(
+            title: 'Sessions',
+            value: '${state.sessionsCompleted}',
+            icon: CupertinoIcons.sparkles,
+            color: SweepTheme.of(context).colors.primary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -450,66 +518,39 @@ class _InfoBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepSurface(
+      tone: SweepSurfaceTone.raised,
       child: Wrap(
         spacing: 10,
-        runSpacing: 6,
+        runSpacing: 10,
         children: <Widget>[
-          _Chip(
+          SweepPill(
             text: formatDate(item.createdAt),
-            icon: Icons.calendar_today_outlined,
+            icon: CupertinoIcons.calendar,
+            color: theme.colors.info,
+            filled: true,
           ),
-          _Chip(
-            text: formatBytes(item.sizeBytes),
-            icon: Icons.sd_storage_outlined,
+          SweepPill(
+            text: formatMaybeBytes(item.sizeBytes),
+            icon: CupertinoIcons.archivebox,
+            color: theme.colors.primary,
+            filled: true,
           ),
-          _Chip(text: item.resolvedFolder, icon: Icons.folder_outlined),
+          SweepPill(
+            text: item.resolvedFolder,
+            icon: CupertinoIcons.folder,
+            color: theme.colors.warning,
+            filled: true,
+          ),
           if (item.isDuplicate)
-            const _Chip(
+            SweepPill(
               text: 'Duplicate',
-              icon: Icons.copy_all_outlined,
-              color: Color(0xFFF25F5C),
+              icon: CupertinoIcons.square_on_square,
+              color: theme.colors.danger,
+              filled: true,
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({
-    required this.text,
-    required this.icon,
-    this.color = const Color(0xFF1F8A8A),
-  });
-
-  final String text;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: color.withValues(alpha: 0.12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          Text(
-            text,
-            style: TextStyle(color: color, fontWeight: FontWeight.w600),
-          ),
         ],
       ),
     );
@@ -534,26 +575,26 @@ class _ActionButtons extends StatelessWidget {
     return Row(
       children: <Widget>[
         _CircleAction(
-          icon: Icons.skip_next_outlined,
-          color: const Color(0xFFFAB84C),
+          icon: CupertinoIcons.forward,
+          color: SweepTheme.of(context).colors.warning,
           onTap: onSkip,
         ),
         const SizedBox(width: 10),
         _CircleAction(
-          icon: Icons.delete_outline,
-          color: const Color(0xFFF25F5C),
+          icon: CupertinoIcons.trash,
+          color: SweepTheme.of(context).colors.danger,
           onTap: onDelete,
         ),
         const SizedBox(width: 10),
         _CircleAction(
-          icon: Icons.sell_outlined,
-          color: const Color(0xFF4C77E2),
+          icon: CupertinoIcons.tag,
+          color: SweepTheme.of(context).colors.info,
           onTap: onTag,
         ),
         const SizedBox(width: 10),
         _CircleAction(
-          icon: Icons.favorite_outline,
-          color: const Color(0xFF45C08A),
+          icon: CupertinoIcons.heart,
+          color: SweepTheme.of(context).colors.success,
           onTap: onKeep,
         ),
       ],
@@ -574,14 +615,17 @@ class _CircleAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          height: 52,
+          height: 58,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(theme.radii.md),
+            border: Border.all(color: color.withValues(alpha: 0.30)),
           ),
           child: Icon(icon, color: color),
         ),
@@ -590,77 +634,37 @@ class _CircleAction extends StatelessWidget {
   }
 }
 
-class _StatPill extends StatelessWidget {
-  const _StatPill({
+class _StatCard extends StatelessWidget {
+  const _StatCard({
     required this.title,
     required this.value,
+    required this.icon,
     required this.color,
   });
 
   final String title;
   final String value;
+  final IconData icon;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepSurface(
+      tone: SweepSurfaceTone.muted,
+      shadows: false,
       child: Column(
         children: <Widget>[
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w800,
-              fontSize: 17,
-            ),
+            style: theme.typography.headline.copyWith(color: color),
           ),
-          Text(title, style: TextStyle(color: color, fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(title, style: theme.typography.caption.copyWith(color: color)),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptyQueueCard extends StatelessWidget {
-  const _EmptyQueueCard({required this.onOpenTrash});
-
-  final VoidCallback onOpenTrash;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: <Widget>[
-            const Icon(
-              Icons.celebration_outlined,
-              size: 64,
-              color: Color(0xFF1F8A8A),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'No cards left in this mode',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Switch discovery mode, rescan, or review your trash queue.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: onOpenTrash,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Open Trash Tab'),
-            ),
-          ],
-        ),
       ),
     );
   }

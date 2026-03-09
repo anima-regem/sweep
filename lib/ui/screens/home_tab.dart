@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../models/sweep_models.dart';
 import '../../state/sweep_controller.dart';
 import '../../utils/formatters.dart';
+import '../components/sweep_primitives.dart';
 import '../widgets/storage_meter.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
@@ -32,228 +34,259 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
     final SweepState state = ref.watch(sweepControllerProvider);
     final SweepController controller = ref.read(
       sweepControllerProvider.notifier,
     );
-    final StorageInsights insights = controller.storageInsights();
-    final List<CleanupSuggestion> suggestions = controller.suggestions();
+    final GallerySummary insights = state.summary;
+    final List<CleanupSuggestion> suggestions = state.cleanupSuggestions;
 
-    return RefreshIndicator(
-      onRefresh: () => controller.scanGallery(
-        scope: _scope,
-        specificFolder: _scope == ScanScope.specificFolder
-            ? _folderController.text.trim()
-            : null,
+    return SweepPage(
+      eyebrow: 'Command Center',
+      title: 'Swipe your gallery clean',
+      subtitle:
+          'Run targeted scans, see the impact instantly, and jump straight into the cleanup session.',
+      trailing: SweepButton(
+        label: 'Session',
+        icon: CupertinoIcons.arrow_right,
+        size: SweepButtonSize.compact,
+        variant: SweepButtonVariant.secondary,
+        onPressed: widget.onOpenSwipe,
       ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 110),
-        children: <Widget>[
-          _HeroCard(insights: insights, onOpenSwipe: widget.onOpenSwipe),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Gallery Scan Engine',
+      children: <Widget>[
+        SweepReveal(
+          child: _HeroPanel(insights: insights, onOpenSwipe: widget.onOpenSwipe),
+        ),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 60),
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                DropdownButtonFormField<ScanScope>(
-                  initialValue: _scope,
-                  decoration: const InputDecoration(
-                    labelText: 'Scan Mode',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: ScanScope.values
+                const SweepSectionHeader(
+                  title: 'Scan engine',
+                  subtitle: 'Pick a scope, rescan, and open a focused session.',
+                ),
+                const SizedBox(height: 16),
+                SweepSelector<ScanScope>(
+                  options: ScanScope.values
                       .map(
-                        (ScanScope scope) => DropdownMenuItem<ScanScope>(
+                        (ScanScope scope) => SweepChoice<ScanScope>(
                           value: scope,
-                          child: Text(scope.label),
+                          label: scope.label,
+                          icon: _scanScopeIcon(scope),
                         ),
                       )
                       .toList(),
-                  onChanged: (ScanScope? value) {
-                    if (value == null) {
-                      return;
-                    }
+                  selected: _scope,
+                  onSelected: (ScanScope value) {
                     setState(() {
                       _scope = value;
                     });
                   },
                 ),
                 if (_scope == ScanScope.specificFolder) ...<Widget>[
-                  const SizedBox(height: 10),
-                  TextField(
+                  const SizedBox(height: 14),
+                  SweepTextField(
+                    label: 'Folder name',
+                    placeholder: 'e.g. WhatsApp Images',
                     controller: _folderController,
-                    decoration: const InputDecoration(
-                      labelText: 'Folder Name',
-                      hintText: 'e.g. WhatsApp Images',
-                      border: OutlineInputBorder(),
+                    prefix: Icon(
+                      CupertinoIcons.folder,
+                      size: 18,
+                      color: theme.colors.textSecondary,
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: state.isLoading
-                            ? null
-                            : () async {
-                                await controller.scanGallery(
-                                  scope: _scope,
-                                  specificFolder:
-                                      _scope == ScanScope.specificFolder
-                                      ? _folderController.text.trim()
-                                      : null,
-                                );
-                                if (!mounted) {
-                                  return;
-                                }
-                                widget.onOpenSwipe();
-                              },
-                        icon: const Icon(Icons.search),
-                        label: const Text('Scan + Start Session'),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+                SweepButton(
+                  label: state.isLoading
+                      ? 'Scanning...'
+                      : 'Scan and open session',
+                  icon: CupertinoIcons.search,
+                  expand: true,
+                  onPressed: state.isLoading
+                      ? null
+                      : () async {
+                          await controller.scanGallery(
+                            scope: _scope,
+                            specificFolder: _scope == ScanScope.specificFolder
+                                ? _folderController.text.trim()
+                                : null,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          widget.onOpenSwipe();
+                        },
                 ),
                 if (state.statusMessage != null) ...<Widget>[
-                  const SizedBox(height: 10),
-                  Text(
-                    state.statusMessage!,
-                    style: TextStyle(color: Colors.grey.shade700),
+                  const SizedBox(height: 12),
+                  SweepPill(
+                    text: state.statusMessage!,
+                    icon: CupertinoIcons.waveform_path_ecg,
+                    color: theme.colors.info,
+                    filled: true,
+                  ),
+                ],
+                if (insights.isPartial) ...<Widget>[
+                  const SizedBox(height: 12),
+                  SweepPill(
+                    text:
+                        '${insights.unresolvedSizeCount} items still refining in the background',
+                    icon: CupertinoIcons.timer,
+                    color: theme.colors.warning,
+                    filled: true,
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          StorageMeter(
+        ),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 110),
+          child: StorageMeter(
             totalBytes: insights.totalSizeBytes,
             reclaimableBytes: insights.potentialFreedBytes,
           ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Storage Insights',
+        ),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 160),
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
+                const SweepSectionHeader(
+                  title: 'Storage insights',
+                  subtitle: 'A snapshot of the current index and likely wins.',
+                ),
+                const SizedBox(height: 14),
                 _InsightRow(
-                  label: 'Total media count',
+                  label: 'Total indexed media',
                   value: '${insights.totalMediaCount}',
                 ),
                 _InsightRow(
-                  label: 'Total storage used',
+                  label: 'Storage footprint',
                   value: formatBytes(insights.totalSizeBytes),
                 ),
                 _InsightRow(
-                  label: 'Duplicate files',
+                  label: 'Duplicates detected',
                   value: '${insights.duplicateCount}',
                 ),
                 _InsightRow(
-                  label: 'Largest videos',
-                  value: '${insights.largestVideos.length} listed',
+                  label: 'Largest videos tracked',
+                  value: '${insights.largestVideos.length}',
                 ),
                 _InsightRow(
-                  label: 'Folders tracked',
+                  label: 'Folders mapped',
                   value: '${insights.folderUsage.length}',
                   showDivider: false,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Suggested Cleanup',
+        ),
+        const SizedBox(height: 16),
+        SweepReveal(
+          delay: const Duration(milliseconds: 220),
+          child: SweepSurface(
+            tone: SweepSurfaceTone.raised,
             child: Column(
-              children: suggestions
-                  .map(
-                    (CleanupSuggestion suggestion) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _SuggestionTile(
-                        suggestion: suggestion,
-                        onStart: () => widget.onApplyMode(suggestion.mode),
-                      ),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const SweepSectionHeader(
+                  title: 'Suggested cleanup paths',
+                  subtitle:
+                      'Shortcuts into modes with immediate storage or clarity impact.',
+                ),
+                const SizedBox(height: 16),
+                ...suggestions.map(
+                  (CleanupSuggestion suggestion) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _SuggestionTile(
+                      suggestion: suggestion,
+                      onStart: () => widget.onApplyMode(suggestion.mode),
                     ),
-                  )
-                  .toList(),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
+  }
+
+  static IconData _scanScopeIcon(ScanScope scope) {
+    switch (scope) {
+      case ScanScope.entireGallery:
+        return CupertinoIcons.rectangle_stack;
+      case ScanScope.specificFolder:
+        return CupertinoIcons.folder;
+      case ScanScope.cameraRollOnly:
+        return CupertinoIcons.camera;
+      case ScanScope.whatsappMedia:
+        return CupertinoIcons.chat_bubble_2;
+      case ScanScope.screenshots:
+        return CupertinoIcons.device_phone_portrait;
+      case ScanScope.downloads:
+        return CupertinoIcons.arrow_down_circle;
+    }
   }
 }
 
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.insights, required this.onOpenSwipe});
+class _HeroPanel extends StatelessWidget {
+  const _HeroPanel({required this.insights, required this.onOpenSwipe});
 
-  final StorageInsights insights;
+  final GallerySummary insights;
   final VoidCallback onOpenSwipe;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF1F8A8A), Color(0xFF3567D6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-      ),
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepSurface(
+      gradient: theme.heroGradient,
+      borderRadius: BorderRadius.circular(theme.radii.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Swipe your gallery clean',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
+          SweepPill(
+            text: '${insights.totalMediaCount} items indexed',
+            icon: CupertinoIcons.sparkles,
+            color: theme.colors.textOnAccent,
+            filled: true,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           Text(
-            '${insights.totalMediaCount} items indexed • ${formatBytes(insights.totalSizeBytes)} total',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          const SizedBox(height: 14),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF1F8A8A),
+            'Fast enough to feel playful.\nFocused enough to be useful.',
+            style: theme.typography.display.copyWith(
+              color: theme.colors.textOnAccent,
             ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${formatBytes(insights.totalSizeBytes)} across the current gallery index'
+            '${insights.isPartial ? ' so far.' : '.'}',
+            style: theme.typography.detail.copyWith(
+              color: theme.colors.textOnAccent.withValues(alpha: 0.86),
+            ),
+          ),
+          const SizedBox(height: 18),
+          SweepButton(
+            label: 'Start swipe session',
+            icon: CupertinoIcons.arrow_right_circle_fill,
+            size: SweepButtonSize.hero,
+            expand: true,
             onPressed: onOpenSwipe,
-            child: const Text('Start Swipe Session'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
       ),
     );
   }
@@ -272,67 +305,81 @@ class _InsightRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
     return Column(
       children: <Widget>[
         Row(
           children: <Widget>[
-            Expanded(child: Text(label)),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Expanded(
+              child: Text(label, style: theme.typography.detail),
+            ),
+            Text(value, style: theme.typography.bodyStrong),
           ],
         ),
-        if (showDivider)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Divider(height: 1),
-          ),
+        if (showDivider) ...<Widget>[
+          const SizedBox(height: 12),
+          Container(height: 1, color: theme.colors.border),
+          const SizedBox(height: 12),
+        ],
       ],
     );
   }
 }
 
 class _SuggestionTile extends StatelessWidget {
-  const _SuggestionTile({required this.suggestion, required this.onStart});
+  const _SuggestionTile({
+    required this.suggestion,
+    required this.onStart,
+  });
 
   final CleanupSuggestion suggestion;
   final VoidCallback onStart;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: const Color(0xFFF5F8FC),
-        border: Border.all(color: Colors.black12),
-      ),
-      padding: const EdgeInsets.all(12),
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepSurface(
+      tone: SweepSurfaceTone.muted,
+      shadows: false,
       child: Row(
         children: <Widget>[
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: const Color(0xFF1F8A8A).withValues(alpha: 0.12),
-            child: Icon(suggestion.mode.icon, color: const Color(0xFF1F8A8A)),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: theme.heroGradient,
+              borderRadius: BorderRadius.circular(theme.radii.md),
+            ),
+            child: Icon(
+              suggestion.mode.icon,
+              color: theme.colors.textOnAccent,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  suggestion.title,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+                Text(suggestion.title, style: theme.typography.bodyStrong),
+                const SizedBox(height: 4),
+                Text(suggestion.subtitle, style: theme.typography.detail),
+                const SizedBox(height: 6),
                 Text(
                   '${suggestion.itemCount} items • ${formatBytes(suggestion.estimatedBytes)}',
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                ),
-                Text(
-                  suggestion.subtitle,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  style: theme.typography.caption,
                 ),
               ],
             ),
           ),
-          TextButton(onPressed: onStart, child: const Text('Start')),
+          const SizedBox(width: 10),
+          SweepButton(
+            label: 'Start',
+            size: SweepButtonSize.compact,
+            variant: SweepButtonVariant.secondary,
+            onPressed: onStart,
+          ),
         ],
       ),
     );
