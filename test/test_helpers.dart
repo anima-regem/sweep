@@ -134,13 +134,7 @@ SweepState buildSeededState({
       decisions ?? <String, SwipeDecision>{};
   final List<String> seededTags =
       customTags ??
-      const <String>[
-        'Friends',
-        'Work',
-        'Travel',
-        'Family',
-        'Documents',
-      ];
+      const <String>['Friends', 'Work', 'Travel', 'Family', 'Documents'];
   final GallerySummary summary = _summaryFor(fixedMedia, seededDecisions);
 
   return SweepState(
@@ -171,10 +165,16 @@ SweepState buildSeededState({
       randomSeed: 73,
     ),
     trashPage: GalleryPage(
-      items: fixedMedia
-          .where((MediaItem item) => seededDecisions[item.id] == SwipeDecision.delete)
-          .toList()
-        ..sort((MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt)),
+      items:
+          fixedMedia
+              .where(
+                (MediaItem item) =>
+                    seededDecisions[item.id] == SwipeDecision.delete,
+              )
+              .toList()
+            ..sort(
+              (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
+            ),
       offset: 0,
       hasMore: false,
       totalCount: seededDecisions.values
@@ -190,8 +190,12 @@ SweepState buildSeededState({
       includeProcessed: false,
       randomSeed: 73,
     ).items,
-    folders: (fixedMedia.map((MediaItem item) => item.resolvedFolder).toSet().toList()
-      ..sort()),
+    folders:
+        (fixedMedia
+            .map((MediaItem item) => item.resolvedFolder)
+            .toSet()
+            .toList()
+          ..sort()),
     taggedCollections: _tagCollections(fixedMedia),
     cleanupSuggestions: _suggestionsFor(fixedMedia),
     randomSeed: 73,
@@ -205,7 +209,9 @@ class TestGalleryRepository implements GalleryRepository {
         ..._state.activePage.items,
         ..._state.sessionQueue,
         ..._state.trashPage.items,
-        ..._state.taggedCollections.values.expand((List<MediaItem> value) => value),
+        ..._state.taggedCollections.values.expand(
+          (List<MediaItem> value) => value,
+        ),
       ])
         item.id: item,
     };
@@ -290,10 +296,15 @@ class TestGalleryRepository implements GalleryRepository {
 
   @override
   GalleryPage fetchTrashPage({required int offset, required int limit}) {
-    final List<MediaItem> trash = _media.values
-        .where((MediaItem item) => _decisions[item.id] == SwipeDecision.delete)
-        .toList()
-      ..sort((MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt));
+    final List<MediaItem> trash =
+        _media.values
+            .where(
+              (MediaItem item) => _decisions[item.id] == SwipeDecision.delete,
+            )
+            .toList()
+          ..sort(
+            (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
+          );
     final int safeOffset = offset.clamp(0, trash.length);
     final int end = safeOffset + limit > trash.length
         ? trash.length
@@ -316,7 +327,10 @@ class TestGalleryRepository implements GalleryRepository {
 
   @override
   List<String> get folders =>
-      _media.values.map((MediaItem item) => item.resolvedFolder).toSet().toList()
+      _media.values
+          .map((MediaItem item) => item.resolvedFolder)
+          .toSet()
+          .toList()
         ..sort();
 
   @override
@@ -391,7 +405,9 @@ class TestGalleryRepository implements GalleryRepository {
   @override
   Future<void> permanentlyDeleteItems(Set<String> ids) async {
     _media.removeWhere((String key, MediaItem value) => ids.contains(key));
-    _decisions.removeWhere((String key, SwipeDecision value) => ids.contains(key));
+    _decisions.removeWhere(
+      (String key, SwipeDecision value) => ids.contains(key),
+    );
   }
 
   @override
@@ -419,15 +435,15 @@ class TestGalleryRepository implements GalleryRepository {
 
 class TestShellController extends SweepShellController {
   TestShellController(SweepDestination destination) : super() {
-    state = destination;
+    show(destination);
   }
 }
 
 class TestSweepController extends SweepController {
   TestSweepController(SweepState initialState)
     : super(repository: TestGalleryRepository(initialState)) {
-      state = initialState;
-    }
+    state = initialState;
+  }
 
   @override
   Future<void> initialize() async {}
@@ -439,10 +455,11 @@ Future<void> pumpSweepApp(
   SweepDestination destination = SweepDestination.session,
   SweepState? seededState,
   List<MediaItem>? media,
+  Size surfaceSize = const Size(393, 852),
 }) async {
   tester.platformDispatcher.platformBrightnessTestValue = brightness;
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-  await tester.binding.setSurfaceSize(const Size(393, 852));
+  await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final List<MediaItem> fixedMedia = media ?? buildFixedMedia();
@@ -465,10 +482,11 @@ Future<void> pumpScopedSweepWidget(
   SweepDestination destination = SweepDestination.session,
   SweepState? seededState,
   List<MediaItem>? media,
+  Size surfaceSize = const Size(393, 852),
 }) async {
   tester.platformDispatcher.platformBrightnessTestValue = brightness;
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-  await tester.binding.setSurfaceSize(const Size(393, 852));
+  await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final List<MediaItem> fixedMedia = media ?? buildFixedMedia();
@@ -480,17 +498,16 @@ Future<void> pumpScopedSweepWidget(
       destination: destination,
       child: WidgetsApp(
         color: const Color(0xFF05070C),
-        pageRouteBuilder:
-            <T>(RouteSettings settings, WidgetBuilder builder) =>
-                PageRouteBuilder<T>(
-                  settings: settings,
-                  pageBuilder:
-                      (
-                        BuildContext context,
-                        Animation<double> animation,
-                        Animation<double> secondaryAnimation,
-                      ) => builder(context),
-                ),
+        pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) =>
+            PageRouteBuilder<T>(
+              settings: settings,
+              pageBuilder:
+                  (
+                    BuildContext context,
+                    Animation<double> animation,
+                    Animation<double> secondaryAnimation,
+                  ) => builder(context),
+            ),
         home: SweepThemeHost(child: child),
       ),
     ),
@@ -525,14 +542,18 @@ GallerySummary _summaryFor(
     0,
     (int sum, MediaItem item) => sum + item.safeSizeBytes,
   );
-  final int duplicateCount = media.where((MediaItem item) => item.isDuplicate).length;
+  final int duplicateCount = media
+      .where((MediaItem item) => item.isDuplicate)
+      .length;
   final int potentialFreedBytes = media
       .where((MediaItem item) => decisions[item.id] == SwipeDecision.delete)
       .fold<int>(0, (int sum, MediaItem item) => sum + item.safeSizeBytes);
-  final List<MediaItem> largestVideos = media
-      .where((MediaItem item) => item.kind == MediaKind.video)
-      .toList()
-    ..sort((MediaItem a, MediaItem b) => b.safeSizeBytes.compareTo(a.safeSizeBytes));
+  final List<MediaItem> largestVideos =
+      media.where((MediaItem item) => item.kind == MediaKind.video).toList()
+        ..sort(
+          (MediaItem a, MediaItem b) =>
+              b.safeSizeBytes.compareTo(a.safeSizeBytes),
+        );
   final Map<String, FolderUsage> folderMap = <String, FolderUsage>{};
   for (final MediaItem item in media) {
     final FolderUsage? existing = folderMap[item.resolvedFolder];
@@ -550,7 +571,9 @@ GallerySummary _summaryFor(
     potentialFreedBytes: potentialFreedBytes,
     largestVideos: largestVideos.take(5).toList(),
     folderUsage: folderMap.values.toList(),
-    unresolvedSizeCount: media.where((MediaItem item) => item.sizeBytes == null).length,
+    unresolvedSizeCount: media
+        .where((MediaItem item) => item.sizeBytes == null)
+        .length,
     isPartial: media.any((MediaItem item) => item.sizeBytes == null),
   );
 }
@@ -574,18 +597,28 @@ GalleryPage _pageFor({
 
   switch (discoveryMode) {
     case DiscoveryMode.largestFiles:
-      filtered.sort((MediaItem a, MediaItem b) => b.safeSizeBytes.compareTo(a.safeSizeBytes));
+      filtered.sort(
+        (MediaItem a, MediaItem b) =>
+            b.safeSizeBytes.compareTo(a.safeSizeBytes),
+      );
       break;
     case DiscoveryMode.oldestMedia:
-      filtered.sort((MediaItem a, MediaItem b) => a.createdAt.compareTo(b.createdAt));
+      filtered.sort(
+        (MediaItem a, MediaItem b) => a.createdAt.compareTo(b.createdAt),
+      );
       break;
     case DiscoveryMode.random:
       filtered.sort((MediaItem a, MediaItem b) {
-        return Object.hash(a.id, randomSeed).compareTo(Object.hash(b.id, randomSeed));
+        return Object.hash(
+          a.id,
+          randomSeed,
+        ).compareTo(Object.hash(b.id, randomSeed));
       });
       break;
     default:
-      filtered.sort((MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt));
+      filtered.sort(
+        (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
+      );
       break;
   }
 
@@ -645,20 +678,27 @@ Map<String, List<MediaItem>> _tagCollections(
 
   return <String, List<MediaItem>>{
     for (final String key in output.keys.toList()..sort())
-      key: (output[key]!..sort(
-            (MediaItem a, MediaItem b) => b.createdAt.compareTo(a.createdAt),
-          ))
-          .take(previewLimit)
-          .toList(),
+      key:
+          (output[key]!..sort(
+                (MediaItem a, MediaItem b) =>
+                    b.createdAt.compareTo(a.createdAt),
+              ))
+              .take(previewLimit)
+              .toList(),
   };
 }
 
 List<CleanupSuggestion> _suggestionsFor(List<MediaItem> media) {
   final List<MediaItem> screenshots = media
-      .where((MediaItem item) => item.resolvedFolder.toLowerCase().contains('screenshot'))
+      .where(
+        (MediaItem item) =>
+            item.resolvedFolder.toLowerCase().contains('screenshot'),
+      )
       .toList();
   final List<MediaItem> large = media.toList()
-    ..sort((MediaItem a, MediaItem b) => b.safeSizeBytes.compareTo(a.safeSizeBytes));
+    ..sort(
+      (MediaItem a, MediaItem b) => b.safeSizeBytes.compareTo(a.safeSizeBytes),
+    );
   final List<MediaItem> oldMedia = media
       .where((MediaItem item) => item.createdAt.year <= 2019)
       .toList();
@@ -679,10 +719,9 @@ List<CleanupSuggestion> _suggestionsFor(List<MediaItem> media) {
       subtitle: 'Highest storage impact first',
       mode: DiscoveryMode.largestFiles,
       itemCount: large.take(50).length,
-      estimatedBytes: large.take(50).fold<int>(
-        0,
-        (int sum, MediaItem item) => sum + item.safeSizeBytes,
-      ),
+      estimatedBytes: large
+          .take(50)
+          .fold<int>(0, (int sum, MediaItem item) => sum + item.safeSizeBytes),
     ),
     CleanupSuggestion(
       title: 'Old photos (<=2019)',

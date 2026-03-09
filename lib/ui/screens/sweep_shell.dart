@@ -26,10 +26,13 @@ class SweepShell extends ConsumerWidget {
     final SweepController controller = ref.read(
       sweepControllerProvider.notifier,
     );
-    final SweepDestination destination = ref.watch(sweepShellControllerProvider);
+    final SweepDestination destination = ref.watch(
+      sweepShellControllerProvider,
+    );
     final SweepShellController shell = ref.read(
       sweepShellControllerProvider.notifier,
     );
+    final bool immersiveSession = destination == SweepDestination.session;
 
     final List<Widget> pages = <Widget>[
       HomeTab(
@@ -39,7 +42,10 @@ class SweepShell extends ConsumerWidget {
           shell.openSession();
         },
       ),
-      SwipeTab(onOpenTrash: () => shell.show(SweepDestination.trash)),
+      SwipeTab(
+        onOpenTrash: () => shell.show(SweepDestination.trash),
+        onCloseSession: shell.exitSession,
+      ),
       ExploreTab(
         onApplyMode: (DiscoveryMode mode, {String? folder}) {
           controller.setDiscoveryMode(mode, folderName: folder);
@@ -73,10 +79,14 @@ class SweepShell extends ConsumerWidget {
           decoration: BoxDecoration(gradient: theme.appGradient),
           child: Stack(
             children: <Widget>[
-              const Positioned.fill(child: _SweepAtmosphere()),
               Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 76),
+                child: _SweepAtmosphere(immersive: immersiveSession),
+              ),
+              Positioned.fill(
+                child: AnimatedPadding(
+                  duration: theme.motion.component,
+                  curve: theme.motion.standard,
+                  padding: EdgeInsets.only(top: immersiveSession ? 0 : 76),
                   child: IndexedStack(index: pageIndex, children: pages),
                 ),
               ),
@@ -93,10 +103,19 @@ class SweepShell extends ConsumerWidget {
                       theme.spacing.gutter,
                       0,
                     ),
-                    child: _ShellTopBar(
-                      destination: destination,
-                      isLoading: state.isLoading,
-                      statusMessage: state.statusMessage,
+                    child: IgnorePointer(
+                      ignoring: immersiveSession,
+                      child: AnimatedOpacity(
+                        key: const ValueKey<String>('shell-topbar-visibility'),
+                        duration: theme.motion.component,
+                        curve: theme.motion.standard,
+                        opacity: immersiveSession ? 0 : 1,
+                        child: _ShellTopBar(
+                          destination: destination,
+                          isLoading: state.isLoading,
+                          statusMessage: state.statusMessage,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -107,10 +126,19 @@ class SweepShell extends ConsumerWidget {
                 bottom: theme.spacing.dockInset,
                 child: SafeArea(
                   top: false,
-                  child: _ShellDock(
-                    destination: destination,
-                    onSelect: shell.show,
-                    onOpenSession: shell.openSession,
+                  child: IgnorePointer(
+                    ignoring: immersiveSession,
+                    child: AnimatedOpacity(
+                      key: const ValueKey<String>('shell-dock-visibility'),
+                      duration: theme.motion.component,
+                      curve: theme.motion.standard,
+                      opacity: immersiveSession ? 0 : 1,
+                      child: _ShellDock(
+                        destination: destination,
+                        onSelect: shell.show,
+                        onOpenSession: shell.openSession,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -229,13 +257,6 @@ class _ShellDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
-    const List<SweepDestination> dockDestinations = <SweepDestination>[
-      SweepDestination.home,
-      SweepDestination.explore,
-      SweepDestination.trash,
-      SweepDestination.tags,
-      SweepDestination.profile,
-    ];
     final bool sessionSelected = destination == SweepDestination.session;
 
     return Stack(
@@ -245,59 +266,59 @@ class _ShellDock extends StatelessWidget {
         SweepSurface(
           tone: SweepSurfaceTone.raised,
           borderRadius: BorderRadius.circular(theme.radii.lg),
-          padding: const EdgeInsets.fromLTRB(12, 22, 12, 14),
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
           child: Row(
-            children: dockDestinations.map((SweepDestination item) {
-              final bool selected = item == destination;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onSelect(item),
-                  child: AnimatedContainer(
-                    duration: theme.motion.component,
-                    curve: theme.motion.standard,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? theme.colors.primarySoft
-                          : const Color(0x00000000),
-                      borderRadius: BorderRadius.circular(theme.radii.md),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
-                          item.icon,
-                          size: 20,
-                          color: selected
-                              ? theme.colors.primary
-                              : theme.colors.textSecondary,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          item.label,
-                          style: theme.typography.caption.copyWith(
-                            color: selected
-                                ? theme.colors.primary
-                                : theme.colors.textTertiary,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Expanded(
+                child: Row(
+                  children:
+                      const <SweepDestination>[
+                        SweepDestination.home,
+                        SweepDestination.explore,
+                      ].map((SweepDestination item) {
+                        return Expanded(
+                          child: _DockDestinationButton(
+                            item: item,
+                            destination: destination,
+                            onSelect: onSelect,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
+                        );
+                      }).toList(),
                 ),
-              );
-            }).toList(),
+              ),
+              SizedBox(width: sessionSelected ? 108 : 100),
+              Expanded(
+                child: Row(
+                  children:
+                      const <SweepDestination>[
+                        SweepDestination.trash,
+                        SweepDestination.tags,
+                        SweepDestination.profile,
+                      ].map((SweepDestination item) {
+                        return Expanded(
+                          child: _DockDestinationButton(
+                            item: item,
+                            destination: destination,
+                            onSelect: onSelect,
+                          ),
+                        );
+                      }).toList(),
+                ),
+              ),
+            ],
           ),
         ),
         Positioned(
-          top: -30,
+          top: -36,
           child: GestureDetector(
+            key: const ValueKey<String>('shell-session-launcher'),
             onTap: onOpenSession,
             child: AnimatedContainer(
               duration: theme.motion.component,
               curve: theme.motion.standard,
-              width: sessionSelected ? 88 : 78,
-              height: sessionSelected ? 88 : 78,
+              width: sessionSelected ? 84 : 76,
+              height: sessionSelected ? 84 : 76,
               decoration: BoxDecoration(
                 gradient: theme.heroGradient,
                 shape: BoxShape.circle,
@@ -306,19 +327,26 @@ class _ShellDock extends StatelessWidget {
                 ),
                 boxShadow: theme.elevation.glow(theme.colors.heroStart, 0.9),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Stack(
+                alignment: Alignment.center,
                 children: <Widget>[
                   Icon(
                     SweepDestination.session.icon,
                     color: theme.colors.textOnAccent,
                     size: 24,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Session',
-                    style: theme.typography.caption.copyWith(
-                      color: theme.colors.textOnAccent,
+                  Positioned(
+                    bottom: 14,
+                    child: AnimatedContainer(
+                      duration: theme.motion.component,
+                      width: sessionSelected ? 18 : 10,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colors.textOnAccent.withValues(
+                          alpha: sessionSelected ? 0.92 : 0.46,
+                        ),
+                        borderRadius: BorderRadius.circular(theme.radii.pill),
+                      ),
                     ),
                   ),
                 ],
@@ -331,8 +359,63 @@ class _ShellDock extends StatelessWidget {
   }
 }
 
+class _DockDestinationButton extends StatelessWidget {
+  const _DockDestinationButton({
+    required this.item,
+    required this.destination,
+    required this.onSelect,
+  });
+
+  final SweepDestination item;
+  final SweepDestination destination;
+  final ValueChanged<SweepDestination> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+    final bool selected = item == destination;
+
+    return GestureDetector(
+      key: ValueKey<String>('dock-${item.name}'),
+      onTap: () => onSelect(item),
+      child: AnimatedContainer(
+        duration: theme.motion.component,
+        curve: theme.motion.standard,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? theme.colors.primarySoft : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(theme.radii.md),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              item.icon,
+              size: 20,
+              color: selected
+                  ? theme.colors.primary
+                  : theme.colors.textSecondary,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.label,
+              style: theme.typography.caption.copyWith(
+                color: selected
+                    ? theme.colors.primary
+                    : theme.colors.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SweepAtmosphere extends StatefulWidget {
-  const _SweepAtmosphere();
+  const _SweepAtmosphere({required this.immersive});
+
+  final bool immersive;
 
   @override
   State<_SweepAtmosphere> createState() => _SweepAtmosphereState();
@@ -352,11 +435,28 @@ class _SweepAtmosphereState extends State<_SweepAtmosphere>
   }
 
   @override
+  void didUpdateWidget(covariant _SweepAtmosphere oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.immersive != widget.immersive) {
+      _syncAnimationState();
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (SweepTheme.of(context).motion.reduceMotion) {
+    _syncAnimationState();
+  }
+
+  void _syncAnimationState() {
+    final bool reduceMotion = SweepTheme.of(context).motion.reduceMotion;
+    if (reduceMotion || widget.immersive) {
       _controller.stop();
-      _controller.value = 0.5;
+      _controller.value = widget.immersive ? 0.44 : 0.5;
+      return;
+    }
+    if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
     }
   }
 
@@ -374,20 +474,21 @@ class _SweepAtmosphereState extends State<_SweepAtmosphere>
       animation: _controller,
       builder: (BuildContext context, Widget? child) {
         final double t = _controller.value;
+        final double intensity = widget.immersive ? 0.34 : 1;
         return Stack(
           children: <Widget>[
             _Orb(
-              color: theme.colors.orbOne,
+              color: theme.colors.orbOne.withValues(alpha: intensity),
               alignment: Alignment(-0.9 + t * 0.45, -0.95 + t * 0.22),
               size: 280,
             ),
             _Orb(
-              color: theme.colors.orbTwo,
+              color: theme.colors.orbTwo.withValues(alpha: intensity),
               alignment: Alignment(0.88 - t * 0.36, -0.25),
               size: 240,
             ),
             _Orb(
-              color: theme.colors.orbThree,
+              color: theme.colors.orbThree.withValues(alpha: intensity * 0.85),
               alignment: Alignment(0.15, 0.92 - t * 0.55),
               size: 260,
             ),

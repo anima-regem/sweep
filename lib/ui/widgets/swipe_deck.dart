@@ -50,17 +50,20 @@ class _SwipeDeckState extends State<SwipeDeck> {
           children: <Widget>[
             if (widget.next != null)
               Positioned.fill(
-                child: Transform.translate(
-                  offset: Offset(0, 24 - depth * 12),
-                  child: Transform.scale(
-                    scale: 0.90 + depth * 0.06,
-                    child: Opacity(
-                      opacity: 0.42 + depth * 0.26,
-                      child: _CardShell(
-                        child: MediaPreview(
-                          item: widget.next!,
-                          borderRadius: BorderRadius.circular(
-                            theme.radii.lg,
+                child: RepaintBoundary(
+                  child: Transform.translate(
+                    offset: Offset(0, 24 - depth * 12),
+                    child: Transform.scale(
+                      scale: 0.90 + depth * 0.06,
+                      child: Opacity(
+                        opacity: 0.42 + depth * 0.26,
+                        child: _CardShell(
+                          child: MediaPreview(
+                            item: widget.next!,
+                            thumbnailSize: 640,
+                            borderRadius: BorderRadius.circular(
+                              theme.radii.lg,
+                            ),
                           ),
                         ),
                       ),
@@ -80,10 +83,10 @@ class _SwipeDeckState extends State<SwipeDeck> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(theme.radii.lg),
                 boxShadow: <BoxShadow>[
-                  ...theme.elevation.panel(1.1),
+                  ...theme.elevation.panel(0.82),
                   ...theme.elevation.glow(
                     _glowColor(theme, direction),
-                    min(0.95, dragDistance / 180),
+                    min(0.62, dragDistance / 220),
                   ),
                 ],
               ),
@@ -140,24 +143,27 @@ class _SwipeDeckState extends State<SwipeDeck> {
                     _dragOffset = Offset.zero;
                   });
                 },
-                child: _CardShell(
-                  child: Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: MediaPreview(
-                          item: current,
-                          borderRadius: BorderRadius.circular(theme.radii.lg),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: _SwipeOverlay(
-                            direction: direction,
-                            intensity: min(1.0, dragDistance / 110),
+                child: RepaintBoundary(
+                  child: _CardShell(
+                    child: Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: MediaPreview(
+                            item: current,
+                            thumbnailSize: 720,
+                            borderRadius: BorderRadius.circular(theme.radii.lg),
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: _SwipeOverlay(
+                              direction: direction,
+                              intensity: min(1.0, dragDistance / 110),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -252,7 +258,7 @@ class _CardShell extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: AspectRatio(aspectRatio: 0.68, child: child),
+      child: AspectRatio(aspectRatio: 0.665, child: child),
     );
   }
 }

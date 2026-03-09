@@ -6,6 +6,7 @@ import 'package:sweep/models/sweep_models.dart';
 import 'package:sweep/state/sweep_controller.dart';
 import 'package:sweep/ui/screens/sweep_shell.dart';
 import 'package:sweep/ui/screens/trash_tab.dart';
+import 'package:sweep/ui/shell/shell_controller.dart';
 import 'package:sweep/ui/widgets/swipe_deck.dart';
 
 import 'test_helpers.dart';
@@ -18,7 +19,7 @@ void main() {
 
     expect(find.byType(WidgetsApp), findsOneWidget);
     expect(find.byType(SweepShell), findsOneWidget);
-    expect(find.text('Live swipe lane'), findsOneWidget);
+    expect(find.text('Session lane'), findsOneWidget);
     expect(find.byType(SwipeDeck, skipOffstage: false), findsOneWidget);
   });
 
@@ -28,43 +29,145 @@ void main() {
     await pumpSweepApp(tester, brightness: Brightness.light);
 
     expect(find.byType(WidgetsApp), findsOneWidget);
-    expect(find.text('Live swipe lane'), findsOneWidget);
-    expect(find.text('SWEEP'), findsOneWidget);
+    expect(find.text('Session lane'), findsOneWidget);
+    expect(find.byType(SwipeDeck, skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('dock navigation moves between destinations and back to session', (
+  testWidgets(
+    'dock navigation moves between destinations and back to session',
+    (WidgetTester tester) async {
+      await pumpSweepApp(tester, destination: SweepDestination.home);
+
+      await tester.tap(find.byKey(const ValueKey<String>('dock-explore')));
+      await settleSweep(tester);
+      expect(find.text('Curate in bulk'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey<String>('dock-profile')));
+      await settleSweep(tester);
+      expect(find.text('Sweep metrics'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('shell-session-launcher')),
+      );
+      await settleSweep(tester);
+      expect(find.text('Session lane'), findsOneWidget);
+    },
+  );
+
+  testWidgets('session launcher never overlaps dock hit targets', (
     WidgetTester tester,
   ) async {
-    await pumpSweepApp(tester);
+    await pumpSweepApp(tester, destination: SweepDestination.home);
 
-    await tester.tap(find.text('Explore').last);
+    final Rect launcherRect = tester.getRect(
+      find.byKey(const ValueKey<String>('shell-session-launcher')),
+    );
+    const List<String> dockKeys = <String>[
+      'dock-home',
+      'dock-explore',
+      'dock-trash',
+      'dock-tags',
+      'dock-profile',
+    ];
+
+    for (final String key in dockKeys) {
+      final Rect dockRect = tester.getRect(find.byKey(ValueKey<String>(key)));
+      expect(
+        launcherRect.overlaps(dockRect),
+        isFalse,
+        reason: 'Session launcher overlaps $key',
+      );
+    }
+  });
+
+  testWidgets('entering session hides shell top bar and dock', (
+    WidgetTester tester,
+  ) async {
+    await pumpSweepApp(tester, destination: SweepDestination.home);
+
+    AnimatedOpacity topBar = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey<String>('shell-topbar-visibility')),
+    );
+    AnimatedOpacity dock = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey<String>('shell-dock-visibility')),
+    );
+    expect(topBar.opacity, 1);
+    expect(dock.opacity, 1);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shell-session-launcher')),
+    );
+    await settleSweep(tester);
+
+    topBar = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey<String>('shell-topbar-visibility')),
+    );
+    dock = tester.widget<AnimatedOpacity>(
+      find.byKey(const ValueKey<String>('shell-dock-visibility')),
+    );
+    expect(topBar.opacity, 0);
+    expect(dock.opacity, 0);
+  });
+
+  testWidgets('exit session returns to the last non-session destination', (
+    WidgetTester tester,
+  ) async {
+    await pumpSweepApp(tester, destination: SweepDestination.home);
+
+    await tester.tap(find.byKey(const ValueKey<String>('dock-explore')));
     await settleSweep(tester);
     expect(find.text('Curate in bulk'), findsOneWidget);
 
-    await tester.tap(find.text('Profile').last);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shell-session-launcher')),
+    );
     await settleSweep(tester);
-    expect(find.text('Sweep metrics'), findsOneWidget);
+    expect(find.text('Session lane'), findsOneWidget);
 
-    await tester.tap(find.text('Session').last);
+    await tester.tap(find.byKey(const ValueKey<String>('session-exit-button')));
     await settleSweep(tester);
-    expect(find.text('Live swipe lane'), findsOneWidget);
+    expect(find.text('Curate in bulk'), findsOneWidget);
   });
 
-  testWidgets('tapping the session card opens and closes the custom action sheet', (
+  testWidgets('review queue opens from session top strip and bottom rail', (
     WidgetTester tester,
   ) async {
-    await pumpSweepApp(tester);
+    final SweepState seeded = buildSeededState(
+      decisions: <String, SwipeDecision>{'camera_1': SwipeDecision.delete},
+    );
+    await pumpSweepApp(tester, seededState: seeded);
 
-    final Finder deck = find.byType(SwipeDeck);
-    final Rect deckRect = tester.getRect(deck);
-    await tester.tapAt(deckRect.topLeft + const Offset(48, 48));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('session-top-review-button')),
+    );
     await settleSweep(tester);
-    expect(find.text('Tag / move'), findsOneWidget);
+    expect(find.text('Delete entire queue'), findsOneWidget);
 
-    await tester.tap(find.text('Keep').last);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shell-session-launcher')),
+    );
     await settleSweep(tester);
-    expect(find.text('Tag / move'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey<String>('session-stat-trash')));
+    await settleSweep(tester);
+    expect(find.text('Delete entire queue'), findsOneWidget);
   });
+
+  testWidgets(
+    'tapping the session card opens and closes the custom action sheet',
+    (WidgetTester tester) async {
+      await pumpSweepApp(tester);
+
+      final Finder deck = find.byType(SwipeDeck);
+      final Rect deckRect = tester.getRect(deck);
+      await tester.tapAt(deckRect.topLeft + const Offset(48, 48));
+      await settleSweep(tester);
+      expect(find.text('Tag / move'), findsOneWidget);
+
+      await tester.tap(find.text('Keep').last);
+      await settleSweep(tester);
+      expect(find.text('Tag / move'), findsNothing);
+    },
+  );
 
   testWidgets('trash flow opens the custom confirmation dialog', (
     WidgetTester tester,
@@ -73,11 +176,7 @@ void main() {
       decisions: <String, SwipeDecision>{'camera_1': SwipeDecision.delete},
     );
 
-    await pumpScopedSweepWidget(
-      tester,
-      const TrashTab(),
-      seededState: seeded,
-    );
+    await pumpScopedSweepWidget(tester, const TrashTab(), seededState: seeded);
 
     expect(find.text('Delete entire queue'), findsOneWidget);
     await tester.tap(find.text('Delete entire queue'));
@@ -87,5 +186,21 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await settleSweep(tester);
     expect(find.text('Permanent delete'), findsNothing);
+  });
+
+  testWidgets('session layout stays stable on compact phone height', (
+    WidgetTester tester,
+  ) async {
+    await pumpSweepApp(tester, surfaceSize: const Size(360, 640));
+
+    expect(
+      find.byKey(const ValueKey<String>('session-top-strip')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('session-bottom-rail')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

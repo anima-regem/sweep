@@ -11,9 +11,14 @@ import '../widgets/completion_dialog.dart';
 import '../widgets/swipe_deck.dart';
 
 class SwipeTab extends ConsumerStatefulWidget {
-  const SwipeTab({required this.onOpenTrash, super.key});
+  const SwipeTab({
+    required this.onOpenTrash,
+    required this.onCloseSession,
+    super.key,
+  });
 
   final VoidCallback onOpenTrash;
+  final VoidCallback onCloseSession;
 
   @override
   ConsumerState<SwipeTab> createState() => _SwipeTabState();
@@ -24,6 +29,8 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+    final EdgeInsets safePadding = MediaQuery.paddingOf(context);
     final SweepState state = ref.watch(sweepControllerProvider);
     final SweepController controller = ref.read(
       sweepControllerProvider.notifier,
@@ -52,72 +59,124 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
     final List<MediaItem> queue = state.sessionQueue;
     final MediaItem? current = queue.isNotEmpty ? queue.first : null;
     final MediaItem? next = queue.length > 1 ? queue[1] : null;
+    final int trashCount = state.decisions.values
+        .where((SwipeDecision decision) => decision == SwipeDecision.delete)
+        .length;
 
-    return SweepPage(
-      eyebrow: 'Session',
-      title: 'Live swipe lane',
-      subtitle:
-          'Move fast through the active discovery mode with gesture-driven actions and a review queue.',
-      trailing: SweepPill(
-        text: '${queue.length} pending',
-        icon: CupertinoIcons.waveform_path,
-        filled: true,
-      ),
+    return Stack(
       children: <Widget>[
-        if (current == null)
-          SweepReveal(
-            child: SweepEmptyState(
-              icon: CupertinoIcons.sparkles,
-              title: 'No cards left in this mode',
-              body:
-                  'Switch discovery modes, rescan the gallery, or open the review queue.',
-              action: SweepButton(
-                label: 'Open review queue',
-                icon: CupertinoIcons.trash,
-                expand: true,
-                onPressed: widget.onOpenTrash,
-              ),
+        Positioned.fill(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              theme.spacing.md,
+              safePadding.top + 76,
+              theme.spacing.md,
+              safePadding.bottom + 170,
             ),
-          )
-        else
-          SweepReveal(
-            child: Column(
-              children: <Widget>[
-                SwipeDeck(
-                  current: current,
-                  next: next,
-                  onTap: () => _openCardActions(current),
-                  onSwipe: (MediaItem item, SwipeDirection direction) {
-                    _handleSwipe(item, direction);
-                  },
-                ),
-                const SizedBox(height: 16),
-                _InfoBanner(item: current),
-                const SizedBox(height: 12),
-                _ActionButtons(
-                  onSkip: () => _handleSwipe(current, SwipeDirection.down),
-                  onDelete: () => _handleSwipe(current, SwipeDirection.left),
-                  onTag: () => _handleSwipe(current, SwipeDirection.up),
-                  onKeep: () => _handleSwipe(current, SwipeDirection.right),
-                ),
-              ],
+            child: AnimatedSwitcher(
+              duration: theme.motion.component,
+              switchInCurve: theme.motion.emphasized,
+              switchOutCurve: theme.motion.standard,
+              child: current == null
+                  ? _SessionEmptyState(
+                      key: const ValueKey<String>('session-empty'),
+                      onOpenTrash: widget.onOpenTrash,
+                      onOpenModes: () =>
+                          _openModeSheet(context, controller, state),
+                      onCloseSession: widget.onCloseSession,
+                    )
+                  : Center(
+                      key: ValueKey<String>(current.id),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 430),
+                        child: SwipeDeck(
+                          current: current,
+                          next: next,
+                          onTap: () => _openCardActions(current),
+                          onSwipe: (MediaItem item, SwipeDirection direction) {
+                            _handleSwipe(item, direction);
+                          },
+                        ),
+                      ),
+                    ),
             ),
           ),
-        const SizedBox(height: 16),
-        SweepReveal(
-          delay: const Duration(milliseconds: 60),
-          child: _SessionSummary(state: state, queueCount: queue.length),
         ),
-        const SizedBox(height: 16),
-        SweepReveal(
-          delay: const Duration(milliseconds: 120),
-          child: _ModePanel(
+        Positioned(
+          top: safePadding.top + 12,
+          left: theme.spacing.gutter,
+          right: theme.spacing.gutter,
+          child: KeyedSubtree(
+            key: const ValueKey<String>('session-top-strip'),
+            child: _SessionTopBar(
+              state: state,
+              queueCount: queue.length,
+              trashCount: trashCount,
+              onCloseSession: widget.onCloseSession,
+              onOpenModes: () => _openModeSheet(context, controller, state),
+              onOpenTrash: widget.onOpenTrash,
+            ),
+          ),
+        ),
+        if (current != null)
+          Positioned(
+            left: theme.spacing.gutter,
+            right: theme.spacing.gutter,
+            bottom: safePadding.bottom + 126,
+            child: _SessionDeckInfo(
+              item: current,
+              onOpenActions: () => _openCardActions(current),
+            ),
+          ),
+        Positioned(
+          left: theme.spacing.sm,
+          right: theme.spacing.sm,
+          bottom: safePadding.bottom + theme.spacing.sm,
+          child: KeyedSubtree(
+            key: const ValueKey<String>('session-bottom-rail'),
+            child: _SessionBottomRail(
+              state: state,
+              queueCount: queue.length,
+              trashCount: trashCount,
+              current: current,
+              onOpenTrash: widget.onOpenTrash,
+              onOpenModes: () => _openModeSheet(context, controller, state),
+              onSkip: current == null
+                  ? null
+                  : () => _handleSwipe(current, SwipeDirection.down),
+              onDelete: current == null
+                  ? null
+                  : () => _handleSwipe(current, SwipeDirection.left),
+              onTag: current == null
+                  ? null
+                  : () => _handleSwipe(current, SwipeDirection.up),
+              onKeep: current == null
+                  ? null
+                  : () => _handleSwipe(current, SwipeDirection.right),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openModeSheet(
+    BuildContext context,
+    SweepController controller,
+    SweepState state,
+  ) async {
+    await showSweepSheet<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return SweepSheetFrame(
+          maxWidth: 760,
+          child: _ModeSheetContent(
             state: state,
             controller: controller,
             onPickFolder: () => _pickFolder(context, controller, state),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -215,7 +274,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               SweepSectionHeader(
-                title: item.path.split('/').last,
+                title: item.displayName,
                 subtitle:
                     '${formatDate(item.createdAt)} • ${formatMaybeBytes(item.sizeBytes)} • ${item.resolvedFolder}',
               ),
@@ -403,8 +462,278 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
   }
 }
 
-class _ModePanel extends StatelessWidget {
-  const _ModePanel({
+class _SessionTopBar extends StatelessWidget {
+  const _SessionTopBar({
+    required this.state,
+    required this.queueCount,
+    required this.trashCount,
+    required this.onCloseSession,
+    required this.onOpenModes,
+    required this.onOpenTrash,
+  });
+
+  final SweepState state;
+  final int queueCount;
+  final int trashCount;
+  final VoidCallback onCloseSession;
+  final VoidCallback onOpenModes;
+  final VoidCallback onOpenTrash;
+
+  @override
+  Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return Row(
+      children: <Widget>[
+        KeyedSubtree(
+          key: const ValueKey<String>('session-exit-button'),
+          child: _SessionIconButton(
+            icon: CupertinoIcons.chevron_left,
+            label: 'Exit session',
+            onTap: onCloseSession,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: onOpenModes,
+            child: SweepSurface(
+              tone: SweepSurfaceTone.raised,
+              blur: false,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    state.discoveryMode.icon,
+                    size: 18,
+                    color: theme.colors.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text('Session lane', style: theme.typography.caption),
+                        const SizedBox(height: 2),
+                        Text(
+                          state.discoveryMode == DiscoveryMode.specificFolder
+                              ? (state.specificFolder ?? 'Specific folder')
+                              : state.discoveryMode.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.typography.label.copyWith(
+                            color: theme.colors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '$queueCount',
+                    style: theme.typography.label.copyWith(
+                      color: theme.colors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        KeyedSubtree(
+          key: const ValueKey<String>('session-top-review-button'),
+          child: _SessionIconButton(
+            icon: CupertinoIcons.trash,
+            label: 'Open review queue',
+            badge: trashCount == 0 ? null : '$trashCount',
+            highlight: trashCount == 0
+                ? theme.colors.info
+                : theme.colors.danger,
+            onTap: onOpenTrash,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionDeckInfo extends StatelessWidget {
+  const _SessionDeckInfo({required this.item, required this.onOpenActions});
+
+  final MediaItem item;
+  final VoidCallback onOpenActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return GestureDetector(
+      onTap: onOpenActions,
+      child: SweepSurface(
+        tone: SweepSurfaceTone.raised,
+        blur: false,
+        shadows: false,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    item.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.title.copyWith(
+                      color: theme.colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.resolvedFolder} • ${formatDate(item.createdAt)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.typography.detail,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Text(
+                  formatMaybeBytes(item.sizeBytes),
+                  style: theme.typography.label.copyWith(
+                    color: theme.colors.primary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.isDuplicate ? 'Duplicate' : 'Open actions',
+                  style: theme.typography.caption.copyWith(
+                    color: item.isDuplicate
+                        ? theme.colors.danger
+                        : theme.colors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionBottomRail extends StatelessWidget {
+  const _SessionBottomRail({
+    required this.state,
+    required this.queueCount,
+    required this.trashCount,
+    required this.current,
+    required this.onOpenTrash,
+    required this.onOpenModes,
+    required this.onSkip,
+    required this.onDelete,
+    required this.onTag,
+    required this.onKeep,
+  });
+
+  final SweepState state;
+  final int queueCount;
+  final int trashCount;
+  final MediaItem? current;
+  final VoidCallback onOpenTrash;
+  final VoidCallback onOpenModes;
+  final VoidCallback? onSkip;
+  final VoidCallback? onDelete;
+  final VoidCallback? onTag;
+  final VoidCallback? onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
+    return SweepSurface(
+      tone: SweepSurfaceTone.raised,
+      blur: false,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
+            children: <Widget>[
+              _StatBadge(
+                key: const ValueKey<String>('session-stat-pending'),
+                label: 'Pending',
+                value: '$queueCount',
+                color: theme.colors.info,
+              ),
+              _StatBadge(
+                key: const ValueKey<String>('session-stat-trash'),
+                label: 'Trash',
+                value: '$trashCount',
+                color: theme.colors.danger,
+                onTap: onOpenTrash,
+                semanticsLabel: 'Open review queue',
+              ),
+              _StatBadge(
+                key: const ValueKey<String>('session-stat-sessions'),
+                label: 'Sessions',
+                value: '${state.sessionsCompleted}',
+                color: theme.colors.primary,
+              ),
+              _StatBadge(
+                key: const ValueKey<String>('session-stat-mode'),
+                label: 'Mode',
+                value: state.discoveryMode == DiscoveryMode.specificFolder
+                    ? 'Folder'
+                    : state.discoveryMode.label,
+                color: theme.colors.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (current == null)
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: SweepButton(
+                    label: 'Review queue',
+                    icon: CupertinoIcons.trash,
+                    variant: SweepButtonVariant.secondary,
+                    onPressed: onOpenTrash,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SweepButton(
+                    label: 'Change mode',
+                    icon: CupertinoIcons.slider_horizontal_3,
+                    onPressed: onOpenModes,
+                  ),
+                ),
+              ],
+            )
+          else
+            _ActionButtons(
+              onSkip: onSkip,
+              onDelete: onDelete,
+              onTag: onTag,
+              onKeep: onKeep,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeSheetContent extends StatelessWidget {
+  const _ModeSheetContent({
     required this.state,
     required this.controller,
     required this.onPickFolder,
@@ -416,142 +745,143 @@ class _ModePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SweepSurface(
-      tone: SweepSurfaceTone.raised,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const SweepSectionHeader(
-            title: 'Discovery lane',
-            subtitle: 'Change the active session mode without leaving the swipe flow.',
-          ),
-          const SizedBox(height: 16),
-          SweepSelector<DiscoveryMode>(
-            options: DiscoveryMode.values
-                .map(
-                  (DiscoveryMode mode) => SweepChoice<DiscoveryMode>(
-                    value: mode,
-                    label: mode.label,
-                    icon: mode.icon,
-                  ),
-                )
-                .toList(),
-            selected: state.discoveryMode,
-            onSelected: (DiscoveryMode mode) {
-              if (mode == DiscoveryMode.specificFolder &&
-                  state.specificFolder == null &&
-                  controller.folders().isNotEmpty) {
-                controller.setDiscoveryMode(
-                  mode,
-                  folderName: controller.folders().first,
-                );
-                return;
-              }
-              controller.setDiscoveryMode(mode);
-            },
-          ),
-          if (state.discoveryMode == DiscoveryMode.specificFolder) ...<Widget>[
-            const SizedBox(height: 16),
-            SweepSelectField(
-              label: 'Folder',
-              value: state.specificFolder,
-              placeholder: 'Choose a folder',
-              icon: CupertinoIcons.folder,
-              onTap: onPickFolder,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SessionSummary extends StatelessWidget {
-  const _SessionSummary({required this.state, required this.queueCount});
-
-  final SweepState state;
-  final int queueCount;
-
-  @override
-  Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
     final int trashCount = state.decisions.values
         .where((SwipeDecision decision) => decision == SwipeDecision.delete)
         .length;
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Expanded(
-          child: _StatCard(
-            title: 'Pending',
-            value: '$queueCount',
-            icon: CupertinoIcons.rectangle_stack_fill,
-            color: SweepTheme.of(context).colors.info,
-          ),
+        const SweepSectionHeader(
+          title: 'Session controls',
+          subtitle:
+              'Change discovery lanes without leaving the immersive swipe view.',
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatCard(
-            title: 'Trash queue',
-            value: '$trashCount',
-            icon: CupertinoIcons.trash_fill,
-            color: SweepTheme.of(context).colors.danger,
-          ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: <Widget>[
+            SweepPill(
+              text: '${state.sessionQueue.length} pending',
+              icon: CupertinoIcons.rectangle_stack_fill,
+              color: theme.colors.info,
+              filled: true,
+            ),
+            SweepPill(
+              text: '$trashCount in review',
+              icon: CupertinoIcons.trash_fill,
+              color: theme.colors.danger,
+              filled: true,
+            ),
+            SweepPill(
+              text: '${state.sessionsCompleted} sessions',
+              icon: CupertinoIcons.sparkles,
+              color: theme.colors.primary,
+              filled: true,
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _StatCard(
-            title: 'Sessions',
-            value: '${state.sessionsCompleted}',
-            icon: CupertinoIcons.sparkles,
-            color: SweepTheme.of(context).colors.primary,
-          ),
+        const SizedBox(height: 18),
+        SweepSelector<DiscoveryMode>(
+          options: DiscoveryMode.values
+              .map(
+                (DiscoveryMode mode) => SweepChoice<DiscoveryMode>(
+                  value: mode,
+                  label: mode.label,
+                  icon: mode.icon,
+                ),
+              )
+              .toList(),
+          selected: state.discoveryMode,
+          onSelected: (DiscoveryMode mode) {
+            if (mode == DiscoveryMode.specificFolder &&
+                state.specificFolder == null &&
+                controller.folders().isNotEmpty) {
+              controller.setDiscoveryMode(
+                mode,
+                folderName: controller.folders().first,
+              );
+              return;
+            }
+            controller.setDiscoveryMode(mode);
+          },
         ),
+        if (state.discoveryMode == DiscoveryMode.specificFolder) ...<Widget>[
+          const SizedBox(height: 16),
+          SweepSelectField(
+            label: 'Folder',
+            value: state.specificFolder,
+            placeholder: 'Choose a folder',
+            icon: CupertinoIcons.folder,
+            onTap: onPickFolder,
+          ),
+        ],
       ],
     );
   }
 }
 
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({required this.item});
+class _SessionIconButton extends StatelessWidget {
+  const _SessionIconButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.highlight,
+    this.badge,
+  });
 
-  final MediaItem item;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? highlight;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
+    final Color tint = highlight ?? theme.colors.textPrimary;
 
-    return SweepSurface(
-      tone: SweepSurfaceTone.raised,
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: <Widget>[
-          SweepPill(
-            text: formatDate(item.createdAt),
-            icon: CupertinoIcons.calendar,
-            color: theme.colors.info,
-            filled: true,
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SweepSurface(
+          tone: SweepSurfaceTone.raised,
+          blur: false,
+          shadows: false,
+          padding: const EdgeInsets.all(12),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Icon(icon, size: 18, color: tint),
+              if (badge != null)
+                Positioned(
+                  right: -6,
+                  top: -8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tint,
+                      borderRadius: BorderRadius.circular(theme.radii.pill),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: theme.typography.caption.copyWith(
+                        color: theme.colors.textOnAccent,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          SweepPill(
-            text: formatMaybeBytes(item.sizeBytes),
-            icon: CupertinoIcons.archivebox,
-            color: theme.colors.primary,
-            filled: true,
-          ),
-          SweepPill(
-            text: item.resolvedFolder,
-            icon: CupertinoIcons.folder,
-            color: theme.colors.warning,
-            filled: true,
-          ),
-          if (item.isDuplicate)
-            SweepPill(
-              text: 'Duplicate',
-              icon: CupertinoIcons.square_on_square,
-              color: theme.colors.danger,
-              filled: true,
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -565,36 +895,42 @@ class _ActionButtons extends StatelessWidget {
     required this.onKeep,
   });
 
-  final VoidCallback onSkip;
-  final VoidCallback onDelete;
-  final VoidCallback onTag;
-  final VoidCallback onKeep;
+  final VoidCallback? onSkip;
+  final VoidCallback? onDelete;
+  final VoidCallback? onTag;
+  final VoidCallback? onKeep;
 
   @override
   Widget build(BuildContext context) {
+    final SweepThemeData theme = SweepTheme.of(context);
+
     return Row(
       children: <Widget>[
-        _CircleAction(
+        _ActionPuck(
+          label: 'Skip',
           icon: CupertinoIcons.forward,
-          color: SweepTheme.of(context).colors.warning,
+          color: theme.colors.warning,
           onTap: onSkip,
         ),
         const SizedBox(width: 10),
-        _CircleAction(
+        _ActionPuck(
+          label: 'Delete',
           icon: CupertinoIcons.trash,
-          color: SweepTheme.of(context).colors.danger,
+          color: theme.colors.danger,
           onTap: onDelete,
         ),
         const SizedBox(width: 10),
-        _CircleAction(
+        _ActionPuck(
+          label: 'Tag',
           icon: CupertinoIcons.tag,
-          color: SweepTheme.of(context).colors.info,
+          color: theme.colors.info,
           onTap: onTag,
         ),
         const SizedBox(width: 10),
-        _CircleAction(
+        _ActionPuck(
+          label: 'Keep',
           icon: CupertinoIcons.heart,
-          color: SweepTheme.of(context).colors.success,
+          color: theme.colors.success,
           onTap: onKeep,
         ),
       ],
@@ -602,16 +938,18 @@ class _ActionButtons extends StatelessWidget {
   }
 }
 
-class _CircleAction extends StatelessWidget {
-  const _CircleAction({
+class _ActionPuck extends StatelessWidget {
+  const _ActionPuck({
+    required this.label,
     required this.icon,
     required this.color,
     required this.onTap,
   });
 
+  final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -620,51 +958,155 @@ class _CircleAction extends StatelessWidget {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          height: 58,
+        child: AnimatedContainer(
+          duration: theme.motion.micro,
+          curve: theme.motion.standard,
+          height: 74,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(theme.radii.md),
-            border: Border.all(color: color.withValues(alpha: 0.30)),
+            border: Border.all(color: color.withValues(alpha: 0.28)),
+            boxShadow: onTap == null
+                ? const <BoxShadow>[]
+                : theme.elevation.glow(color, 0.24),
           ),
-          child: Icon(icon, color: color),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                icon,
+                color: onTap == null ? color.withValues(alpha: 0.44) : color,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: theme.typography.caption.copyWith(
+                  color: onTap == null ? color.withValues(alpha: 0.44) : color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
+class _StatBadge extends StatelessWidget {
+  const _StatBadge({
+    super.key,
+    required this.label,
     required this.value,
-    required this.icon,
     required this.color,
+    this.onTap,
+    this.semanticsLabel,
   });
 
-  final String title;
+  final String label;
   final String value;
-  final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
+  final String? semanticsLabel;
 
   @override
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
 
-    return SweepSurface(
-      tone: SweepSurfaceTone.muted,
-      shadows: false,
+    final Widget badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(theme.radii.pill),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: theme.typography.headline.copyWith(color: color),
-          ),
-          const SizedBox(height: 4),
-          Text(title, style: theme.typography.caption.copyWith(color: color)),
+          Text(value, style: theme.typography.label.copyWith(color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: theme.typography.caption.copyWith(color: color)),
         ],
+      ),
+    );
+
+    if (onTap == null) {
+      return badge;
+    }
+
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: badge,
+      ),
+    );
+  }
+}
+
+class _SessionEmptyState extends StatelessWidget {
+  const _SessionEmptyState({
+    required this.onOpenTrash,
+    required this.onOpenModes,
+    required this.onCloseSession,
+    super.key,
+  });
+
+  final VoidCallback onOpenTrash;
+  final VoidCallback onOpenModes;
+  final VoidCallback onCloseSession;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SweepSurface(
+          tone: SweepSurfaceTone.raised,
+          blur: false,
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const SweepSectionHeader(
+                title: 'This session lane is clear',
+                subtitle:
+                    'Switch to another discovery mode, review the delete queue, or step back to the main library.',
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Change mode',
+                      icon: CupertinoIcons.slider_horizontal_3,
+                      onPressed: onOpenModes,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SweepButton(
+                      label: 'Review queue',
+                      icon: CupertinoIcons.trash,
+                      variant: SweepButtonVariant.secondary,
+                      onPressed: onOpenTrash,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SweepButton(
+                label: 'Return to library',
+                icon: CupertinoIcons.chevron_left,
+                expand: true,
+                variant: SweepButtonVariant.ghost,
+                onPressed: onCloseSession,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

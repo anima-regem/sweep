@@ -8,12 +8,12 @@ import '../../data/thumbnail_service.dart';
 import '../../models/sweep_models.dart';
 import '../../utils/formatters.dart';
 
-class MediaPreview extends ConsumerWidget {
+class MediaPreview extends ConsumerStatefulWidget {
   const MediaPreview({
     required this.item,
     this.borderRadius,
     this.showMetadata = true,
-    this.thumbnailSize = 720,
+    this.thumbnailSize = 384,
     super.key,
   });
 
@@ -23,18 +23,47 @@ class MediaPreview extends ConsumerWidget {
   final int thumbnailSize;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final Widget content = item.assetId == null
+  ConsumerState<MediaPreview> createState() => _MediaPreviewState();
+}
+
+class _MediaPreviewState extends ConsumerState<MediaPreview> {
+  Future<Uint8List?>? _thumbnailFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncThumbnailFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant MediaPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.assetId != widget.item.assetId ||
+        oldWidget.thumbnailSize != widget.thumbnailSize) {
+      _syncThumbnailFuture();
+    }
+  }
+
+  void _syncThumbnailFuture() {
+    if (widget.item.assetId == null) {
+      _thumbnailFuture = null;
+      return;
+    }
+    _thumbnailFuture = ref
+        .read(thumbnailServiceProvider)
+        .load(widget.item.assetId!, size: widget.thumbnailSize);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget content = widget.item.assetId == null
         ? _PlaceholderContent(item: item)
         : FutureBuilder<Uint8List?>(
-            future: ref.read(thumbnailServiceProvider).load(
-              item.assetId!,
-              size: thumbnailSize,
-            ),
+            future: _thumbnailFuture,
             builder:
                 (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
                   if (!snapshot.hasData || snapshot.data == null) {
-                    return _PlaceholderContent(item: item);
+                    return _PlaceholderContent(item: widget.item);
                   }
 
                   return Stack(
@@ -55,11 +84,11 @@ class MediaPreview extends ConsumerWidget {
                 },
           );
 
-    final Widget wrapped = borderRadius == null
+    final Widget wrapped = widget.borderRadius == null
         ? content
-        : ClipRRect(borderRadius: borderRadius!, child: content);
+        : ClipRRect(borderRadius: widget.borderRadius!, child: content);
 
-    if (!showMetadata) {
+    if (!widget.showMetadata) {
       return wrapped;
     }
 
@@ -71,6 +100,8 @@ class MediaPreview extends ConsumerWidget {
       ],
     );
   }
+
+  MediaItem get item => widget.item;
 }
 
 class _MetadataOverlay extends StatelessWidget {
@@ -256,7 +287,9 @@ class _VideoPlayBadge extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: const Color(0xAA000000),
-        border: Border.all(color: theme.colors.textOnAccent.withValues(alpha: 0.16)),
+        border: Border.all(
+          color: theme.colors.textOnAccent.withValues(alpha: 0.16),
+        ),
       ),
       child: Icon(
         CupertinoIcons.play_fill,

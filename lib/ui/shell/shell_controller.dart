@@ -48,12 +48,21 @@ sweepShellControllerProvider =
 class SweepShellController extends StateNotifier<SweepDestination> {
   SweepShellController() : super(SweepDestination.session);
 
+  SweepDestination _lastNonSessionDestination = SweepDestination.home;
+
+  SweepDestination get lastNonSessionDestination => _lastNonSessionDestination;
+
   void show(SweepDestination destination) {
     if (state == destination) {
       return;
+    }
+    if (destination != SweepDestination.session) {
+      _lastNonSessionDestination = destination;
     }
     state = destination;
   }
 
   void openSession() => show(SweepDestination.session);
+
+  void exitSession() => show(_lastNonSessionDestination);
 }

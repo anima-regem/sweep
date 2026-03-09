@@ -13,16 +13,22 @@ final Provider<ThumbnailService> thumbnailServiceProvider =
     });
 
 class ThumbnailService with WidgetsBindingObserver {
+  static const int _minThumbnailSize = 120;
+  static const int _maxThumbnailSize = 768;
+
   ThumbnailService({this.capacity = 160}) {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final int capacity;
-  final LinkedHashMap<String, Uint8List> _cache = LinkedHashMap<String, Uint8List>();
-  final Map<String, Future<Uint8List?>> _pending = <String, Future<Uint8List?>>{};
+  final LinkedHashMap<String, Uint8List> _cache =
+      LinkedHashMap<String, Uint8List>();
+  final Map<String, Future<Uint8List?>> _pending =
+      <String, Future<Uint8List?>>{};
 
   Future<Uint8List?> load(String assetId, {required int size}) {
-    final String key = '$assetId::$size';
+    final int normalizedSize = _normalizeSize(size);
+    final String key = '$assetId::$normalizedSize';
     final Uint8List? cached = _cache.remove(key);
     if (cached != null) {
       _cache[key] = cached;
@@ -34,9 +40,14 @@ class ThumbnailService with WidgetsBindingObserver {
       return inFlight;
     }
 
-    final Future<Uint8List?> request = _fetch(assetId, size, key);
+    final Future<Uint8List?> request = _fetch(assetId, normalizedSize, key);
     _pending[key] = request;
     return request;
+  }
+
+  int _normalizeSize(int size) {
+    final int clamped = size.clamp(_minThumbnailSize, _maxThumbnailSize);
+    return ((clamped + 31) ~/ 32) * 32;
   }
 
   Future<Uint8List?> _fetch(String assetId, int size, String key) async {

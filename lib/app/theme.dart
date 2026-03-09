@@ -227,15 +227,15 @@ class SweepMotionTokens {
 
   Duration get micro => reduceMotion
       ? Duration.zero
-      : const Duration(milliseconds: 140);
+      : const Duration(milliseconds: 120);
 
   Duration get component => reduceMotion
       ? Duration.zero
-      : const Duration(milliseconds: 240);
+      : const Duration(milliseconds: 180);
 
   Duration get screen => reduceMotion
       ? Duration.zero
-      : const Duration(milliseconds: 420);
+      : const Duration(milliseconds: 320);
 
   Curve get standard => reduceMotion ? Curves.linear : Curves.easeOutCubic;
   Curve get emphasized => reduceMotion ? Curves.linear : Curves.easeOutQuart;
