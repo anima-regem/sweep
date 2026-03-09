@@ -127,12 +127,12 @@ class SweepShell extends ConsumerWidget {
                 child: SafeArea(
                   top: false,
                   child: IgnorePointer(
-                    ignoring: immersiveSession,
+                    ignoring: false,
                     child: AnimatedOpacity(
                       key: const ValueKey<String>('shell-dock-visibility'),
                       duration: theme.motion.component,
                       curve: theme.motion.standard,
-                      opacity: immersiveSession ? 0 : 1,
+                      opacity: 1,
                       child: _ShellDock(
                         destination: destination,
                         onSelect: shell.show,
@@ -299,7 +299,7 @@ class _DockDestinationButton extends StatelessWidget {
           return AnimatedContainer(
             duration: theme.motion.component,
             curve: theme.motion.standard,
-            padding: EdgeInsets.symmetric(vertical: showLabel ? 10 : 12),
+            padding: EdgeInsets.symmetric(vertical: showLabel ? 8 : 11),
             decoration: BoxDecoration(
               color: selected
                   ? theme.colors.primarySoft
@@ -317,13 +317,16 @@ class _DockDestinationButton extends StatelessWidget {
                       : theme.colors.textSecondary,
                 ),
                 if (showLabel) ...<Widget>[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     item.label,
                     maxLines: 1,
                     overflow: TextOverflow.fade,
                     softWrap: false,
                     style: theme.typography.caption.copyWith(
+                      fontSize: 9.5,
+                      height: 1.0,
+                      letterSpacing: 0.24,
                       color: selected
                           ? theme.colors.primary
                           : theme.colors.textTertiary,

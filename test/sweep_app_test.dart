@@ -52,7 +52,7 @@ void main() {
     },
   );
 
-  testWidgets('entering session hides shell top bar and dock', (
+  testWidgets('entering session hides top bar and keeps dock visible', (
     WidgetTester tester,
   ) async {
     await pumpSweepApp(tester, destination: SweepDestination.home);
@@ -76,7 +76,7 @@ void main() {
       find.byKey(const ValueKey<String>('shell-dock-visibility')),
     );
     expect(topBar.opacity, 0);
-    expect(dock.opacity, 0);
+    expect(dock.opacity, 1);
   });
 
   testWidgets('exit session returns to the last non-session destination', (
@@ -127,11 +127,11 @@ void main() {
       final Rect deckRect = tester.getRect(deck);
       await tester.tapAt(deckRect.topLeft + const Offset(48, 48));
       await settleSweep(tester);
-      expect(find.text('Tag / move'), findsOneWidget);
+      expect(find.text('Tag+Move'), findsOneWidget);
 
       await tester.tap(find.text('Keep').last);
       await settleSweep(tester);
-      expect(find.text('Tag / move'), findsNothing);
+      expect(find.text('Tag+Move'), findsNothing);
     },
   );
 

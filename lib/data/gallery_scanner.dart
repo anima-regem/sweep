@@ -22,6 +22,27 @@ class GalleryScanBatch {
 class GalleryScanner {
   const GalleryScanner();
 
+  static const List<String> _videoExtensions = <String>[
+    '.mp4',
+    '.mov',
+    '.mkv',
+    '.avi',
+    '.m4v',
+    '.3gp',
+    '.webm',
+  ];
+
+  static const List<String> _imageExtensions = <String>[
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.webp',
+    '.bmp',
+    '.heic',
+    '.heif',
+  ];
+
   Stream<GalleryScanBatch> scanBatches({
     required ScanScope scope,
     String? specificFolder,
@@ -41,7 +62,7 @@ class GalleryScanner {
       }
 
       final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
-        type: RequestType.common,
+        type: RequestType.all,
         hasAll: true,
       );
 
@@ -71,10 +92,7 @@ class GalleryScanner {
           }
 
           final List<MediaItem> items = pageItems
-              .where((AssetEntity asset) {
-                return asset.type != AssetType.audio &&
-                    asset.type != AssetType.other;
-              })
+              .where(_isSupportedAsset)
               .map((AssetEntity asset) => _assetToMedia(asset, album.name))
               .toList();
 
@@ -192,7 +210,7 @@ class GalleryScanner {
   }
 
   MediaKind _mapAssetKind(AssetEntity asset) {
-    if (asset.type == AssetType.video) {
+    if (_isVideoLikeAsset(asset)) {
       return MediaKind.video;
     }
 
@@ -201,5 +219,33 @@ class GalleryScanner {
     }
 
     return MediaKind.image;
+  }
+
+  bool _isSupportedAsset(AssetEntity asset) {
+    if (asset.type == AssetType.image || asset.type == AssetType.video) {
+      return true;
+    }
+
+    if (asset.type == AssetType.audio) {
+      return false;
+    }
+
+    return _isVideoLikeAsset(asset) || _isImageLikeAsset(asset);
+  }
+
+  bool _isVideoLikeAsset(AssetEntity asset) {
+    if (asset.type == AssetType.video) {
+      return true;
+    }
+    final String title = asset.title?.toLowerCase() ?? '';
+    return _videoExtensions.any(title.endsWith);
+  }
+
+  bool _isImageLikeAsset(AssetEntity asset) {
+    if (asset.type == AssetType.image) {
+      return true;
+    }
+    final String title = asset.title?.toLowerCase() ?? '';
+    return _imageExtensions.any(title.endsWith);
   }
 }

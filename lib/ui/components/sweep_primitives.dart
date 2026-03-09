@@ -188,6 +188,9 @@ class _SweepButtonState extends State<SweepButton> {
                 child: Text(
                   widget.label,
                   textAlign: widget.textAlign,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                   style: theme.typography.button.copyWith(
                     color: style.foreground,
                     fontSize: widget.size == SweepButtonSize.hero ? 15 : 14,

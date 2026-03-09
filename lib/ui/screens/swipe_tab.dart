@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../data/thumbnail_service.dart';
 import '../../models/sweep_models.dart';
 import '../../state/sweep_controller.dart';
 import '../../utils/formatters.dart';
@@ -25,6 +28,9 @@ class SwipeTab extends ConsumerStatefulWidget {
 }
 
 class _SwipeTabState extends ConsumerState<SwipeTab> {
+  static const double _sessionDockOffset = 108;
+  static const int _thumbnailWarmCount = 7;
+
   bool _dialogVisible = false;
 
   @override
@@ -62,6 +68,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
     final int trashCount = state.decisions.values
         .where((SwipeDecision decision) => decision == SwipeDecision.delete)
         .length;
+    _warmUpcomingThumbnails(queue, ref);
 
     return Stack(
       children: <Widget>[
@@ -71,7 +78,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
               theme.spacing.md,
               safePadding.top + 76,
               theme.spacing.md,
-              safePadding.bottom + 170,
+              safePadding.bottom + 170 + _sessionDockOffset,
             ),
             child: AnimatedSwitcher(
               duration: theme.motion.component,
@@ -122,7 +129,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
           Positioned(
             left: theme.spacing.gutter,
             right: theme.spacing.gutter,
-            bottom: safePadding.bottom + 126,
+            bottom: safePadding.bottom + 126 + _sessionDockOffset,
             child: _SessionDeckInfo(
               item: current,
               onOpenActions: () => _openCardActions(current),
@@ -131,7 +138,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
         Positioned(
           left: theme.spacing.sm,
           right: theme.spacing.sm,
-          bottom: safePadding.bottom + theme.spacing.sm,
+          bottom: safePadding.bottom + theme.spacing.sm + _sessionDockOffset,
           child: KeyedSubtree(
             key: const ValueKey<String>('session-bottom-rail'),
             child: _SessionBottomRail(
@@ -158,6 +165,23 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
         ),
       ],
     );
+  }
+
+  void _warmUpcomingThumbnails(List<MediaItem> queue, WidgetRef ref) {
+    final ThumbnailService service = ref.read(thumbnailServiceProvider);
+    int warmed = 0;
+
+    for (final MediaItem item in queue) {
+      final String? assetId = item.assetId;
+      if (assetId == null) {
+        continue;
+      }
+      unawaited(service.load(assetId, size: 384));
+      warmed += 1;
+      if (warmed >= _thumbnailWarmCount) {
+        break;
+      }
+    }
   }
 
   Future<void> _openModeSheet(
@@ -283,8 +307,9 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
                 children: <Widget>[
                   Expanded(
                     child: SweepButton(
-                      label: 'Tag / move',
+                      label: 'Tag+Move',
                       icon: CupertinoIcons.tag,
+                      size: SweepButtonSize.compact,
                       variant: SweepButtonVariant.secondary,
                       onPressed: () async {
                         Navigator.of(context).pop();
@@ -297,6 +322,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
                     child: SweepButton(
                       label: 'Delete',
                       icon: CupertinoIcons.trash,
+                      size: SweepButtonSize.compact,
                       variant: SweepButtonVariant.danger,
                       onPressed: () {
                         Navigator.of(context).pop();
@@ -309,6 +335,7 @@ class _SwipeTabState extends ConsumerState<SwipeTab> {
                     child: SweepButton(
                       label: 'Keep',
                       icon: CupertinoIcons.heart,
+                      size: SweepButtonSize.compact,
                       variant: SweepButtonVariant.secondary,
                       onPressed: () {
                         Navigator.of(context).pop();
