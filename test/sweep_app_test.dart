@@ -46,39 +46,11 @@ void main() {
       await settleSweep(tester);
       expect(find.text('Sweep metrics'), findsOneWidget);
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('shell-session-launcher')),
-      );
+      await tester.tap(find.byKey(const ValueKey<String>('dock-session')));
       await settleSweep(tester);
       expect(find.text('Session lane'), findsOneWidget);
     },
   );
-
-  testWidgets('session launcher never overlaps dock hit targets', (
-    WidgetTester tester,
-  ) async {
-    await pumpSweepApp(tester, destination: SweepDestination.home);
-
-    final Rect launcherRect = tester.getRect(
-      find.byKey(const ValueKey<String>('shell-session-launcher')),
-    );
-    const List<String> dockKeys = <String>[
-      'dock-home',
-      'dock-explore',
-      'dock-trash',
-      'dock-tags',
-      'dock-profile',
-    ];
-
-    for (final String key in dockKeys) {
-      final Rect dockRect = tester.getRect(find.byKey(ValueKey<String>(key)));
-      expect(
-        launcherRect.overlaps(dockRect),
-        isFalse,
-        reason: 'Session launcher overlaps $key',
-      );
-    }
-  });
 
   testWidgets('entering session hides shell top bar and dock', (
     WidgetTester tester,
@@ -94,9 +66,7 @@ void main() {
     expect(topBar.opacity, 1);
     expect(dock.opacity, 1);
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('shell-session-launcher')),
-    );
+    await tester.tap(find.byKey(const ValueKey<String>('dock-session')));
     await settleSweep(tester);
 
     topBar = tester.widget<AnimatedOpacity>(
@@ -118,9 +88,7 @@ void main() {
     await settleSweep(tester);
     expect(find.text('Curate in bulk'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('shell-session-launcher')),
-    );
+    await tester.tap(find.byKey(const ValueKey<String>('dock-session')));
     await settleSweep(tester);
     expect(find.text('Session lane'), findsOneWidget);
 
@@ -143,9 +111,7 @@ void main() {
     await settleSweep(tester);
     expect(find.text('Delete entire queue'), findsOneWidget);
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('shell-session-launcher')),
-    );
+    await tester.tap(find.byKey(const ValueKey<String>('dock-session')));
     await settleSweep(tester);
     await tester.tap(find.byKey(const ValueKey<String>('session-stat-trash')));
     await settleSweep(tester);

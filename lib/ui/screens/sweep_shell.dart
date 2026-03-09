@@ -136,7 +136,6 @@ class SweepShell extends ConsumerWidget {
                       child: _ShellDock(
                         destination: destination,
                         onSelect: shell.show,
-                        onOpenSession: shell.openSession,
                       ),
                     ),
                   ),
@@ -244,118 +243,31 @@ class _ShellTopBar extends StatelessWidget {
 }
 
 class _ShellDock extends StatelessWidget {
-  const _ShellDock({
-    required this.destination,
-    required this.onSelect,
-    required this.onOpenSession,
-  });
+  const _ShellDock({required this.destination, required this.onSelect});
 
   final SweepDestination destination;
   final ValueChanged<SweepDestination> onSelect;
-  final VoidCallback onOpenSession;
 
   @override
   Widget build(BuildContext context) {
     final SweepThemeData theme = SweepTheme.of(context);
-    final bool sessionSelected = destination == SweepDestination.session;
-    final double centerGap = sessionSelected ? 108 : 100;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.bottomCenter,
-      children: <Widget>[
-        SweepSurface(
-          tone: SweepSurfaceTone.raised,
-          borderRadius: BorderRadius.circular(theme.radii.lg),
-          padding: const EdgeInsets.fromLTRB(12, 16, 12, 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              Expanded(
-                child: Row(
-                  children:
-                      const <SweepDestination>[
-                        SweepDestination.home,
-                        SweepDestination.explore,
-                      ].map((SweepDestination item) {
-                        return Expanded(
-                          child: _DockDestinationButton(
-                            item: item,
-                            destination: destination,
-                            onSelect: onSelect,
-                          ),
-                        );
-                      }).toList(),
-                ),
-              ),
-              SizedBox(width: centerGap),
-              Expanded(
-                child: Row(
-                  children:
-                      const <SweepDestination>[
-                        SweepDestination.trash,
-                        SweepDestination.tags,
-                        SweepDestination.profile,
-                      ].map((SweepDestination item) {
-                        return Expanded(
-                          child: _DockDestinationButton(
-                            item: item,
-                            destination: destination,
-                            onSelect: onSelect,
-                          ),
-                        );
-                      }).toList(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Positioned(
-          top: -36,
-          child: GestureDetector(
-            key: const ValueKey<String>('shell-session-launcher'),
-            onTap: onOpenSession,
-            child: AnimatedContainer(
-              duration: theme.motion.component,
-              curve: theme.motion.standard,
-              width: sessionSelected ? 84 : 76,
-              height: sessionSelected ? 84 : 76,
-              decoration: BoxDecoration(
-                gradient: theme.heroGradient,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: theme.colors.textOnAccent.withValues(alpha: 0.22),
-                ),
-                boxShadow: theme.elevation.glow(theme.colors.heroStart, 0.9),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: <Widget>[
-                  Icon(
-                    SweepDestination.session.icon,
-                    color: theme.colors.textOnAccent,
-                    size: 24,
-                  ),
-                  Positioned(
-                    bottom: 14,
-                    child: AnimatedContainer(
-                      duration: theme.motion.component,
-                      width: sessionSelected ? 18 : 10,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colors.textOnAccent.withValues(
-                          alpha: sessionSelected ? 0.92 : 0.46,
-                        ),
-                        borderRadius: BorderRadius.circular(theme.radii.pill),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    return SweepSurface(
+      tone: SweepSurfaceTone.raised,
+      borderRadius: BorderRadius.circular(theme.radii.lg),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: SweepDestination.values.map((SweepDestination item) {
+          return Expanded(
+            child: _DockDestinationButton(
+              item: item,
+              destination: destination,
+              onSelect: onSelect,
             ),
-          ),
-        ),
-      ],
+          );
+        }).toList(),
+      ),
     );
   }
 }
