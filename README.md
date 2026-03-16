@@ -62,3 +62,5 @@ Sweep is an Android-first Flutter app that turns gallery cleanup into a swipe wo
 flutter pub get
 flutter run
 ```
+
+.
